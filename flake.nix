@@ -31,6 +31,7 @@
             gcc
             pkg-config
             libiconv
+            python3Packages.psutil
           ];
 
           shellHook = ''
