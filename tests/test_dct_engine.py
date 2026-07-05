@@ -1,7 +1,30 @@
+import ctypes
 import math
+import os
 import time
 import unittest
-from src.dct_engine import idct_2d, ycbcr_to_rgb, decode_mcu
+
+try:
+    from src.dct_engine import idct_2d
+except (ImportError, AttributeError):
+    _so_path = os.path.join(
+        os.path.dirname(__file__), "..", "src", "libdct_engine.so"
+    )
+    _lib = ctypes.CDLL(_so_path)
+    _lib.idct_2d.argtypes = [ctypes.c_void_p]
+    _lib.idct_2d.restype = None
+    _buf = (ctypes.c_double * 64)()
+
+    def idct_2d(matrix):
+        for i in range(8):
+            row = matrix[i]
+            base = i * 8
+            for j in range(8):
+                _buf[base + j] = row[j]
+        _lib.idct_2d(ctypes.byref(_buf))
+        return [[_buf[i * 8 + j] for j in range(8)] for i in range(8)]
+
+from src.dct_engine import ycbcr_to_rgb, decode_mcu
 
 
 class TestDCTEngine(unittest.TestCase):
