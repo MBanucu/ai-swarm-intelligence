@@ -2,7 +2,7 @@
 set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-POPULATION_SIZE=3
+POPULATION_SIZE=2
 WORKER_CORES=(0 1 2)
 BENCH_CORE=3
 GENERATION_FILE="$ROOT_DIR/logs/current_gen.txt"
@@ -42,7 +42,7 @@ for i in $(seq 1 $POPULATION_SIZE); do
         WORKER_CORE=${WORKER_CORES[$(( (i - 1) % ${#WORKER_CORES[@]} ))]}
 
         echo "[Child $i] Breeding unique genome (core $WORKER_CORE)..."
-        taskset -c "$WORKER_CORE" opencode \
+        taskset -c "$WORKER_CORE" stdbuf -oL opencode \
             --model opencode-go/deepseek-v4-flash \
             run \
             --thinking \
@@ -61,7 +61,7 @@ for i in $(seq 1 $POPULATION_SIZE); do
             > "$CHILD_DIR/mutation.log" 2>&1
 
         echo "[Child $i] Starting lifecycle (core $WORKER_CORE)..."
-        taskset -c "$WORKER_CORE" opencode \
+        taskset -c "$WORKER_CORE" stdbuf -oL opencode \
             --model opencode-go/deepseek-v4-flash \
             --agent dct-evolver \
             --dir "$CHILD_DIR" \
