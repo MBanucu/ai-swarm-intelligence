@@ -24,6 +24,8 @@
             gh
             bc
             opencode
+            expect
+            util-linux
           ];
 
           shellHook = ''

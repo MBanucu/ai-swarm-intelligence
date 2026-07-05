@@ -30,6 +30,36 @@ echo "  Worker cores: ${WORKER_CORES[*]} | Benchmark core: $BENCH_CORE"
 echo "================================================================================"
 echo ""
 
+CPU_THRESHOLD=90.0
+declare -A CHILD_PIDS
+
+cpu_watchdog() {
+    sleep 5
+    while [ "$WATCHDOG_ALIVE" = true ]; do
+        CURRENT_LOAD=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+
+        if (( $(echo "$CURRENT_LOAD > $CPU_THRESHOLD" | bc -l) )); then
+            echo "WATCHDOG ALERT: CPU=${CURRENT_LOAD}% > threshold=${CPU_THRESHOLD}% — safeguarding benchmarks!"
+
+            for id in "${!CHILD_PIDS[@]}"; do
+                PID=${CHILD_PIDS[$id]}
+                if kill -0 "$PID" 2>/dev/null; then
+                    echo "  Terminating Child $id (PID: $PID)"
+                    kill -TERM -"$PID" 2>/dev/null || kill -TERM "$PID" 2>/dev/null
+                    echo "999.9" > "$GEN_DIR/child_$id/fitness.score"
+                    echo "DEAD_BY_WATCHDOG" > "$GEN_DIR/child_$id/death_test.log"
+                fi
+            done
+            break
+        fi
+        sleep 2
+    done
+}
+
+WATCHDOG_ALIVE=true
+cpu_watchdog &
+WATCHDOG_PID=$!
+
 for i in $(seq 1 $POPULATION_SIZE); do
     (
         CHILD_DIR="$GEN_DIR/child_$i"
@@ -41,8 +71,10 @@ for i in $(seq 1 $POPULATION_SIZE); do
         MUTATED_AGENT="$CHILD_DIR/.opencode/agents/dct-evolver.md"
         WORKER_CORE=${WORKER_CORES[$(( (i - 1) % ${#WORKER_CORES[@]} ))]}
 
+        trap "echo 'Child terminated by orchestrator' >&2; exit 1" TERM
+
         echo "[Child $i] Breeding unique genome (core $WORKER_CORE)..."
-        taskset -c "$WORKER_CORE" stdbuf -oL opencode \
+        taskset -c "$WORKER_CORE" unbuffer opencode \
             --model opencode-go/deepseek-v4-flash \
             run \
             --thinking \
@@ -61,7 +93,7 @@ for i in $(seq 1 $POPULATION_SIZE); do
             > "$CHILD_DIR/mutation.log" 2>&1
 
         echo "[Child $i] Starting lifecycle (core $WORKER_CORE)..."
-        taskset -c "$WORKER_CORE" stdbuf -oL opencode \
+        taskset -c "$WORKER_CORE" unbuffer opencode \
             --model opencode-go/deepseek-v4-flash \
             --agent dct-evolver \
             --dir "$CHILD_DIR" \
@@ -105,10 +137,14 @@ with open('$CHILD_DIR/fitness.score', 'w') as f:
             cp "$CHILD_DIR/test_output.log" "$CHILD_DIR/death_test.log" 2>/dev/null || true
         fi
     ) &
+    CHILD_PIDS[$i]=$!
 done
 
 echo "[*] Waiting for population lifecycles to conclude..."
-wait
+wait "${CHILD_PIDS[@]}" 2>/dev/null || true
+
+WATCHDOG_ALIVE=false
+kill "$WATCHDOG_PID" 2>/dev/null || true
 
 echo ""
 echo "--- Natural Selection ---"
