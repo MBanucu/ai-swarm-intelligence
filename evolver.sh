@@ -83,6 +83,15 @@ for i in $(seq 1 $POPULATION_SIZE); do
              Use a temperature between 0.3-0.8. Tweak the frontmatter parameters (temperature, maxSteps 20-60).
              Rephrase optimization strategies differently from the parent — try a DIFFERENT algorithmic angle than siblings.
 
+             FREEDOM OF LANGUAGE:
+             You are explicitly allowed to move away from pure Python. You can choose to implement the core IDCT math in Python, C, or Rust.
+
+             ARCHITECTURAL CONSTRAINTS:
+             1. If you use Python, keep the structure inside 'src/dct_engine.py'.
+             2. If you use C or Rust, you must write a script or Makefile that builds a shared object file at 'src/libdct_engine.so'.
+             3. The library must expose a C-compatible function: 'void idct_2d(double* block);'.
+             4. Update the execution instructions in your core rules so your sibling workflows know how to build your code.
+
              CRITICAL — YAML FRONTMATTER RULES:
              - Keep the exact line 'permission: allow' verbatim on its own line. Do NOT expand it into granular rules with sub-keys.
              - Do NOT add anything under 'permission'. It must stay as the single line 'permission: allow'.
@@ -111,22 +120,36 @@ for i in $(seq 1 $POPULATION_SIZE); do
         echo "[Child $i] Fitness evaluation on isolated core $BENCH_CORE..."
         if (cd "$CHILD_DIR" && python3 -m unittest tests.test_dct_engine -v > test_output.log 2>&1); then
             taskset -c "$BENCH_CORE" python3 -c "
-import time, statistics, sys
-sys.path.insert(0, '$CHILD_DIR')
-from src.dct_engine import idct_2d
+import time, statistics, sys, os, ctypes
+
+CHILD_DIR = '$CHILD_DIR'
+SO_PATH = os.path.join(CHILD_DIR, 'src', 'libdct_engine.so')
+
+if os.path.exists(SO_PATH):
+    lib = ctypes.CDLL(SO_PATH)
+    lib.idct_2d.argtypes = [ctypes.POINTER(ctypes.c_double)]
+    def run_idct(b):
+        flat_arr = (ctypes.c_double * 64)(*[val for row in b for val in row])
+        lib.idct_2d(flat_arr)
+else:
+    sys.path.insert(0, CHILD_DIR)
+    from src.dct_engine import idct_2d
+    def run_idct(b):
+        idct_2d(b)
+
 block = [[float(i * j % 256 - 128) for j in range(8)] for i in range(8)]
 for _ in range(200):
-    idct_2d(block)
+    run_idct(block)
 rounds, iters = 10, 5000
 samples = []
 for _ in range(rounds):
     start = time.perf_counter()
     for _ in range(iters):
-        idct_2d(block)
+        run_idct(block)
     elapsed = time.perf_counter() - start
     samples.append((elapsed / iters) * 1000)
 score = statistics.median(samples)
-with open('$CHILD_DIR/fitness.score', 'w') as f:
+with open(os.path.join(CHILD_DIR, 'fitness.score'), 'w') as f:
     f.write(f'{score:.6f}')
 " 2>/dev/null
             SCORE=$(cat "$CHILD_DIR/fitness.score" 2>/dev/null || echo "999")

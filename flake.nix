@@ -26,10 +26,15 @@
             opencode
             expect
             util-linux
+            rustc
+            cargo
+            gcc
+            pkg-config
+            libiconv
           ];
 
           shellHook = ''
-            echo "[swarm] GPU evolution sandbox ready — $(python3 --version)"
+            echo "[swarm] Polyglot evolution sandbox ready — $(python3 --version)"
           '';
         };
       });
