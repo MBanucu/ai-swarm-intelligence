@@ -7,6 +7,10 @@ pub mod gpu;
 
 use std::os::raw::c_double;
 
+/// 64‑byte‑aligned storage (cache‑line aligned for AVX loads/stores).
+#[repr(align(64))]
+pub(crate) struct AlignedBlock(pub(crate) [f64; 64]);
+
 #[derive(Debug, Clone)]
 pub struct JpegInfo {
     pub width: u16,
