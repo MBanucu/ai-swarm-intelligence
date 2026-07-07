@@ -249,6 +249,7 @@ mod opencl_backend {
         pro_que: ProQue,
         idct_kernel: Kernel,
         device: String,
+        buf: std::sync::Mutex<Option<Buffer<f32>>>,
     }
 
     // Safety: the OpenClKernel is only ever used from a single thread at a time
@@ -280,7 +281,7 @@ mod opencl_backend {
                 .build()
                 .map_err(|e| GpuError::KernelError(format!("kernel build: {e}")))?;
 
-            Ok(OpenClKernel { pro_que, idct_kernel, device: device_name })
+            Ok(OpenClKernel { pro_que, idct_kernel, device: device_name, buf: std::sync::Mutex::new(None) })
         }
     }
 
@@ -288,33 +289,32 @@ mod opencl_backend {
         fn batch_idct_2d(&self, blocks: &mut [[f32; 64]]) -> Result<(), GpuError> {
             let n = blocks.len();
             if n == 0 { return Ok(()); }
+            let total = n * 64;
 
-            let buf = Buffer::builder()
-                .queue(self.pro_que.queue().clone())
-                .flags(MemFlags::new().read_write())
-                .len(n * 64)
-                .copy_host_slice(unsafe {
-                    std::slice::from_raw_parts(
-                        blocks.as_ptr() as *const f32,
-                        n * 64,
-                    )
-                })
-                .build()
-                .map_err(|e| GpuError::KernelError(format!("buffer alloc: {e}")))?;
+            let mut buf_guard = self.buf.lock().unwrap();
+            if buf_guard.as_ref().map_or(true, |b| b.len() < total) {
+                *buf_guard = Some(Buffer::builder()
+                    .queue(self.pro_que.queue().clone())
+                    .flags(MemFlags::new().read_write())
+                    .len(total)
+                    .build()
+                    .map_err(|e| GpuError::KernelError(format!("buffer alloc: {e}")))?);
+            }
+            let buf = buf_guard.as_ref().unwrap();
+
+            // Write host data to device buffer
+            buf.write(unsafe {
+                std::slice::from_raw_parts(blocks.as_ptr() as *const f32, total)
+            }).enq().map_err(|e| GpuError::KernelError(format!("write: {e}")))?;
 
             self.idct_kernel
-                .set_arg(0, &buf)
+                .set_arg(0, buf)
                 .map_err(|e| GpuError::KernelError(format!("arg 0: {e}")))?;
             self.idct_kernel
                 .set_arg(1, &(n as i32))
                 .map_err(|e| GpuError::KernelError(format!("arg 1: {e}")))?;
 
             unsafe {
-                // Use local_work_size(64) to balance parallelism vs register pressure.
-                // On Intel iGPUs, large private arrays (64 f32 = 512 B per work item)
-                // can cause register spilling with large workgroups; 64 items per
-                // workgroup keeps pressure manageable while still exploiting the GPU's
-                // SIMD units.
                 let local_size = if n < 64 { n as u64 } else { 64 };
                 self.idct_kernel.cmd()
                     .global_work_size(n)
@@ -326,7 +326,7 @@ mod opencl_backend {
             buf.read(unsafe {
                 std::slice::from_raw_parts_mut(
                     blocks.as_mut_ptr() as *mut f32,
-                    n * 64,
+                    total,
                 )
             }).enq().map_err(|e| GpuError::KernelError(format!("readback: {e}")))?;
 
