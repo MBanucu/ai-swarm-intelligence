@@ -1,4 +1,4 @@
-use jpeg_engine::idct_2d;
+use jpeg_engine::idct_2d_batch;
 use std::env;
 use std::fs;
 use std::time::Instant;
@@ -14,18 +14,14 @@ fn create_blocks(count: usize) -> Vec<[f64; 64]> {
 }
 
 fn benchmark(blocks: &mut Vec<[f64; 64]>, iter_count: usize, label: &str) -> f64 {
-    for block in blocks.iter_mut() {
-        idct_2d(block.as_mut_ptr());
-    }
+    idct_2d_batch(blocks.as_mut_ptr() as *mut f64, blocks.len() as u32);
 
     let rounds = 10;
     let mut samples = Vec::with_capacity(rounds);
     for _ in 0..rounds {
         let start = Instant::now();
         for _ in 0..iter_count {
-            for block in blocks.iter_mut() {
-                idct_2d(block.as_mut_ptr());
-            }
+            idct_2d_batch(blocks.as_mut_ptr() as *mut f64, blocks.len() as u32);
         }
         let elapsed = start.elapsed().as_secs_f64();
         samples.push((elapsed / iter_count as f64) * 1000.0);

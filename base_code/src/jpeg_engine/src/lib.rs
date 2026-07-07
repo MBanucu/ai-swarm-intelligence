@@ -51,9 +51,18 @@ pub extern "C" fn dct_2d(block: *mut c_double) {
 #[no_mangle]
 pub extern "C" fn idct_2d(block: *mut c_double) {
     let slice = unsafe { std::slice::from_raw_parts_mut(block, 64) };
-    // Work directly on the slice — no intermediate copy.
     let arr: &mut [f64; 64] = slice.try_into().unwrap();
     idct::idct_2d(arr);
+}
+
+#[no_mangle]
+pub extern "C" fn idct_2d_batch(blocks: *mut c_double, count: u32) {
+    let n = count as usize;
+    let slice = unsafe { std::slice::from_raw_parts_mut(blocks, n * 64) };
+    let blocks: &mut [[f64; 64]] = unsafe {
+        std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut [f64; 64], n)
+    };
+    idct::batch_idct_2d(blocks);
 }
 
 #[no_mangle]
