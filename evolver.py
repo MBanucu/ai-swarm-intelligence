@@ -80,7 +80,26 @@ class ChildProcess:
             for f in self.sibling_failures[-5:]:
                 prompt += f"   - Attempt {f['attempt']}: {f['reason']}\n"
             if self.failure_dir:
-                prompt += f"   Full failure logs at: {self.failure_dir}/\n"
+                prompt += (
+                    f"   Failure summaries at: {self.failure_dir}/\n"
+                    f"   YOU MUST READ EVERY FILE in {self.failure_dir}/"
+                    f" for a quick overview.\n"
+                    f"   FOR FULL LOGS, read the sibling sandboxes:\n"
+                )
+                for f in self.sibling_failures[-5:]:
+                    prompt += (
+                        f"     - child_{f['attempt']}/test_output.log"
+                        f" (compiler errors)\n"
+                        f"     - child_{f['attempt']}/lifecycle.log"
+                        f" (optimization output)\n"
+                        f"     - child_{f['attempt']}/benchmark.log"
+                        f" (benchmark output)\n"
+                    )
+                prompt += (
+                    f"   Extract the root cause of each failure from the"
+                    f" FULL logs and incorporate those lessons into your"
+                    f" Strategies to AVOID section.\n"
+                )
 
         prompt += (
             f"\n\nOUTPUT: Write a concise analysis to '{self.analysis_path}' with:\n"
@@ -212,7 +231,22 @@ class ChildProcess:
         if self.sibling_failures:
             prompt += f"\n\n## Previous Sibling Failures (DO NOT REPEAT)\n"
             if self.failure_dir:
-                prompt += f"Full logs at: {self.failure_dir}/\n"
+                prompt += (
+                    f"Failure summaries at: {self.failure_dir}/\n"
+                    f"READ EVERY FILE in {self.failure_dir}/"
+                    f" for a quick overview before making changes.\n"
+                    f"FOR FULL LOGS, read sibling sandboxes:\n"
+                )
+                for f in self.sibling_failures[-5:]:
+                    prompt += (
+                        f"  - child_{f['attempt']}/test_output.log"
+                        f" (compiler errors)\n"
+                        f"  - child_{f['attempt']}/lifecycle.log"
+                        f" (optimization output)\n"
+                    )
+                prompt += (
+                    f"Understand the exact errors that killed each sibling.\n"
+                )
             for f in self.sibling_failures[-5:]:
                 prompt += f"- Attempt {f['attempt']}: {f['reason']}"
                 if self.failure_dir:
