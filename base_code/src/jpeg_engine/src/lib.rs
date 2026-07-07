@@ -70,10 +70,9 @@ fn gpu_kernel() -> &'static Option<Box<dyn gpu::GpuKernel>> {
         {
             let k = gpu::create_kernel();
             if k.device_name() != "CPU" {
-                eprintln!("[jpeg_engine] GPU auto-dispatch enabled: {}", k.device_name());
                 Some(k)
             } else {
-                eprintln!("[jpeg_engine] GPU not available, using CPU for all batches");
+                // create_kernel() already logged the reason (unavailable / too slow).
                 None
             }
         }
