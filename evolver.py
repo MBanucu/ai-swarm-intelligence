@@ -31,6 +31,8 @@ class ChildProcess:
         self.core = worker_core
         self.parent_agent_path = parent_agent_path
         self.score = 999.9
+        self.sibling_failures = []
+        self.failure_dir = None
         self.mutated_agent = os.path.join(
             self.dir, ".opencode", "agents", "dct-evolver.md"
         )
@@ -130,6 +132,20 @@ class ChildProcess:
             f"5) Note: the orchestrator handles the final benchmark."
             f" You do NOT need to run bench or write fitness.score."
         )
+        if self.sibling_failures:
+            prompt += f"\n\n## Previous Sibling Failures (DO NOT REPEAT)\n"
+            if self.failure_dir:
+                prompt += f"Full logs at: {self.failure_dir}/\n"
+            for f in self.sibling_failures[-5:]:
+                prompt += f"- Attempt {f['attempt']}: {f['reason']}"
+                if self.failure_dir:
+                    prompt += f" (see {self.failure_dir}/attempt_{f['attempt']}.txt)"
+                prompt += "\n"
+                for key in ("test_tail", "bench_tail", "lifecycle_tail"):
+                    if key in f:
+                        lines = f[key].strip().split("\n")[-3:]
+                        prompt += f"  {chr(10).join('  ' + l for l in lines)}\n"
+            prompt += "\nAnalyze these failures and choose a DIFFERENT approach."
         cmd = [
             "taskset", "-c", str(self.core),
             "unbuffer", "opencode",
@@ -209,6 +225,48 @@ def wait_for_cpu(headroom):
         print(f"  CPU at {load:.0f}%, waiting for headroom < {headroom:.0f}%...")
 
 
+def _collect_failure(child):
+    failure = {"attempt": child.attempt, "reason": "unknown"}
+    lifecycle_log = os.path.join(child.dir, "lifecycle.log")
+    test_log = os.path.join(child.dir, "test_output.log")
+    bench_log = os.path.join(child.dir, "benchmark.log")
+
+    if os.path.exists(test_log):
+        with open(test_log) as f:
+            content = f.read()
+        if "FAILED" in content or "error: test failed" in content:
+            failure["reason"] = "cargo test failed"
+            failure["test_tail"] = _tail_lines(content, 15)
+        elif os.path.exists(bench_log):
+            with open(bench_log) as f:
+                failure["reason"] = "benchmark failed"
+                failure["bench_tail"] = _tail_lines(f.read(), 10)
+    elif os.path.exists(lifecycle_log):
+        with open(lifecycle_log) as f:
+            content = f.read()
+        failure["reason"] = "lifecycle crashed"
+        failure["lifecycle_tail"] = _tail_lines(content, 20)
+
+    return failure
+
+
+def _save_failure(failure_dir, attempt, failure):
+    path = os.path.join(failure_dir, f"attempt_{attempt}.txt")
+    with open(path, "w") as f:
+        f.write(f"Attempt {attempt} — {failure['reason']}\n")
+        f.write("=" * 60 + "\n")
+        for key in ("test_tail", "bench_tail", "lifecycle_tail"):
+            if key in failure:
+                f.write(f"\n--- {key} ---\n")
+                f.write(failure[key])
+                f.write("\n")
+
+
+def _tail_lines(text, n):
+    lines = text.strip().split("\n")
+    return "\n".join(lines[-n:])
+
+
 def main():
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(os.path.join(ROOT_DIR, "logs"), exist_ok=True)
@@ -238,6 +296,9 @@ def main():
     best_score = 999.9
     winner_dir = None
     winner_attempt = 0
+    sibling_failures = []
+    failure_dir = os.path.join(gen_dir, "failures")
+    os.makedirs(failure_dir, exist_ok=True)
 
     for attempt in range(1, MAX_RETRIES + 1):
         print()
@@ -247,6 +308,8 @@ def main():
 
         core = WORKER_CORES[(attempt - 1) % len(WORKER_CORES)]
         child = ChildProcess(attempt, gen, gen_dir, core, parent_agent)
+        child.sibling_failures = sibling_failures.copy()
+        child.failure_dir = failure_dir
 
         print(f"\n--- Attempt {attempt} on core {core} ---", flush=True)
         print(f"    dir: {child.dir}", flush=True)
@@ -260,8 +323,12 @@ def main():
             print(f">>> SURVIVOR FOUND on attempt {attempt}: {best_score:.6f}ms/iter")
             break
 
+        failure = _collect_failure(child)
+        sibling_failures.append(failure)
+        _save_failure(failure_dir, attempt, failure)
+
         print()
-        print(f"EXTINCTION on attempt {attempt}: No viable survivor.")
+        print(f"EXTINCTION on attempt {attempt}: {failure['reason']}")
         print("Breeding fresh child...")
 
     if winner_dir is None:
