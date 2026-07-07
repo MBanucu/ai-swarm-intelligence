@@ -10,7 +10,7 @@ name = "jpeg_engine"
 
 [features]
 default = []
-gpu = ["ocl", "rayon"]
+gpu = ["ocl", "rayon", "opencl"]
 cuda = []
 opencl = ["ocl"]
 rayon = ["dep:rayon"]

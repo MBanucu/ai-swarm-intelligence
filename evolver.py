@@ -117,10 +117,14 @@ class ChildProcess:
             f"- Approaches that failed in past generations\n"
             f"- Anti-patterns that caused test failures or regressions\n\n"
             f"IMPORTANT CONTEXT:\n"
-            f"- The benchmark tests 3 batch sizes via idct_2d_batch() API.\n"
-            f"- idct_2d_batch receives ALL blocks at once — the engine can dispatch"
-            f" to CPU or GPU based on block count.\n"
-            f"- Fitness = 0.5*high + 0.3*mid + 0.2*low (lower is better).\n"
+            f"- The benchmark tests 6 batch sizes (10–250K blocks) spanning\n"
+            f"  from single blocks to a typical 5 MB JPEG decode.\n"
+            f"- Fitness = weighted average: 250K(50%) + 25K(20%) + 5K(10%)\n"
+            f"  + 1K(10%) + 250(7%) + 10(3%). Lower is better.\n"
+            f"- GPU wins overwhelmingly on 250K blocks (50% of fitness).\n"
+            f"  GPU overhead (~100–500µs) hurts on <500 blocks.\n"
+            f"- idct_2d_batch receives ALL blocks at once — dispatch CPU or\n"
+            f"  GPU based on block count using GPU_THRESHOLD.\n"
             f"- GPU acceleration (OpenCL) wins on large batches.\n"
             f"- CPU path wins on small batches. CPU parallelism (rayon) also viable.\n"
             f"- idct_2d_batch() should auto-select CPU vs GPU based on count.\n\n"
@@ -400,6 +404,15 @@ def _save_state(gen, attempt, best_score=None):
         f.write("\n")
 
 
+def _log_attempt(gen, attempt, score, status):
+    ts = datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
+    with open(BENCHMARK_HISTORY, "a") as f:
+        f.write(
+            f"| Gen {gen} | Attempt {attempt}"
+            f" | {score:.6f}ms | {status} | {ts} |\n"
+        )
+
+
 def main():
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(os.path.join(ROOT_DIR, "logs"), exist_ok=True)
@@ -428,10 +441,11 @@ def main():
                     parts = [p.strip() for p in line.split("|")]
                     if len(parts) >= 4:
                         try:
-                            prev_best = float(parts[3].rstrip("ms"))
+                            score = float(parts[3].rstrip("ms"))
+                            if prev_best is None or score < prev_best:
+                                prev_best = score
                         except ValueError:
                             pass
-                    break
 
     if prev_best is not None:
         print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.6f}ms/iter")
@@ -488,6 +502,7 @@ def main():
                 sibling_failures.append(failure)
                 _save_failure(failure_dir, attempt, failure)
                 _save_state(gen, attempt + 1)
+                _log_attempt(gen, attempt, child.score, "regression")
                 print()
                 print(f"REGRESSION on attempt {attempt}: {child.score:.6f}ms >= previous gen {prev_best:.6f}ms")
             elif child.score < best_score:
@@ -495,10 +510,12 @@ def main():
                 winner_dir = child.dir
                 winner_attempt = attempt
                 _save_state(gen, attempt + 1)
+                _log_attempt(gen, attempt, child.score, "best")
                 print()
                 print(f">>> NEW BEST on attempt {attempt}: {best_score:.6f}ms/iter")
             else:
                 _save_state(gen, attempt + 1)
+                _log_attempt(gen, attempt, child.score, "survived")
                 print()
                 print(f"    Survived on attempt {attempt}: {child.score:.6f}ms/iter (best: {best_score:.6f})")
         else:
@@ -506,6 +523,7 @@ def main():
             sibling_failures.append(failure)
             _save_failure(failure_dir, attempt, failure)
             _save_state(gen, attempt + 1)
+            _log_attempt(gen, attempt, 999.9, "extinction")
 
             print()
             print(f"EXTINCTION on attempt {attempt}: {failure['reason']}")
@@ -557,13 +575,6 @@ def main():
         os.path.join(winner_dir, ".opencode", "agents", "dct-evolver.md"),
         os.path.join(ARCHIVE_DIR, f"gen_{gen}_winner.md"),
     )
-
-    with open(BENCHMARK_HISTORY, "a") as f:
-        ts = datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
-        f.write(
-            f"| Gen {gen} | Attempt {winner_attempt}"
-            f" | {best_score:.6f}ms | {ts} |\n"
-        )
 
     subprocess.run(["git", "-C", ROOT_DIR, "add", "-A"], check=False)
 

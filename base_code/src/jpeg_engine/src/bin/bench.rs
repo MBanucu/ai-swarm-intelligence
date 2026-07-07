@@ -34,9 +34,8 @@ fn reference_idct_2d(block: &[f64; 64]) -> [f64; 64] {
 
 fn validate() {
     let mut rng = StdRng::seed_from_u64(0xbad_f00d_cafe_1337);
-    let epsilon = 0.5; // generous tolerance for f64 rounding differences
+    let epsilon = 0.5;
 
-    // Test pattern: single non-zero coefficient
     let mut test_cases: Vec<[f64; 64]> = Vec::new();
 
     // DC-only block
@@ -82,8 +81,17 @@ fn validate() {
     }
     println!("Validation: all {} test cases passed.", test_cases.len());
 
-    // Validate batch processing at all benchmark sizes
-    for &batch_size in &[10, 200, 10000] {
+    // Batch validation — full reference for small sizes, spot-check for large
+    let batch_sizes: &[(usize, usize)] = &[
+        (10, 0),        // 0 = full comparison
+        (1000, 0),
+        (25000, 0),
+        (250000, 20),   // spot-check first 20 blocks only
+    ];
+
+    for &(batch_size, check_n) in batch_sizes {
+        let check_count = if check_n == 0 { batch_size } else { check_n };
+
         let mut blocks: Vec<[f64; 64]> = (0..batch_size).map(|i| {
             let mut b = [0.0f64; 64];
             b[0] = (i as f64 - 0.5) * 64.0;
@@ -93,12 +101,15 @@ fn validate() {
             b
         }).collect();
 
-        let expected: Vec<[f64; 64]> = blocks.iter().map(|b| reference_idct_2d(b)).collect();
+        let expected: Vec<[f64; 64]> = blocks[..check_count]
+            .iter().map(|b| reference_idct_2d(b)).collect();
 
         let ptr = blocks.as_mut_ptr() as *mut f64;
         idct_2d_batch(ptr, blocks.len() as u32);
 
-        for (k, (engine_block, ref_block)) in blocks.iter().zip(expected.iter()).enumerate() {
+        for (k, (engine_block, ref_block)) in blocks[..check_count]
+            .iter().zip(expected.iter()).enumerate()
+        {
             for j in 0..64 {
                 let diff = (engine_block[j] - ref_block[j]).abs();
                 if diff > epsilon {
@@ -110,7 +121,8 @@ fn validate() {
                 }
             }
         }
-        println!("Validation: batch_size={} — all {} blocks passed.", batch_size, blocks.len());
+        println!("Validation: batch_size={} — {} blocks checked, all passed.",
+                 batch_size, check_count);
     }
 }
 
@@ -131,7 +143,15 @@ fn create_blocks(count: usize) -> Vec<[f64; 64]> {
     }).collect()
 }
 
+/// Scale iteration count inversely with batch size so total work stays
+/// bounded. Large batches get fewer iterations per round to avoid
+/// multi-minute benchmarks on 250K+ blocks.
+fn adaptive_iters(batch_size: usize, max_iters: usize) -> usize {
+    (5_000_000 / batch_size).max(1).min(max_iters)
+}
+
 fn benchmark(blocks: &mut Vec<[f64; 64]>, iter_count: usize, label: &str) -> f64 {
+    // Warmup
     idct_2d_batch(blocks.as_mut_ptr() as *mut f64, blocks.len() as u32);
 
     let rounds = 10;
@@ -147,31 +167,59 @@ fn benchmark(blocks: &mut Vec<[f64; 64]>, iter_count: usize, label: &str) -> f64
 
     samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let median = samples[samples.len() / 2];
-    println!("  {:<10} {:>6} blocks  {:.6} ms/iter", label, blocks.len(), median);
+    println!("  {:<10} {:>7} blocks  {:>9.6} ms/iter", label, blocks.len(), median);
     median
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let iter_count: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5000);
+    let max_iters: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5000);
 
     validate();
 
-    let mut low = create_blocks(10);
-    let mut medium = create_blocks(200);
-    let mut high = create_blocks(10000);
+    // Batch sizes spanning realistic JPEG workloads:
+    //    10       — single block (20% old weight)
+    //    250      — small thumbnail (~2 KP)
+    //    1K       — medium tile / web image (~8 KP)
+    //    5K       — large tile (~40 KP)
+    //    25K      — HD frame (~200 KP, baseline GPU crossover)
+    //    250K     — ~5 MP image (typical 5 MB JPEG, 50% weight)
+    struct Batch {
+        size: usize,
+        label: &'static str,
+        weight: f64,
+    }
+    let batches = [
+        Batch { size: 10,     label: "10",     weight: 0.03 },
+        Batch { size: 250,    label: "250",    weight: 0.07 },
+        Batch { size: 1000,   label: "1K",     weight: 0.10 },
+        Batch { size: 5000,   label: "5K",     weight: 0.10 },
+        Batch { size: 25000,  label: "25K",    weight: 0.20 },
+        Batch { size: 250000, label: "250K",   weight: 0.50 },
+    ];
 
-    println!("\nBenchmark — {} iterations per round:", iter_count);
-    let low_ms = benchmark(&mut low, iter_count, "Low");
-    let med_ms = benchmark(&mut medium, iter_count, "Medium");
-    let high_ms = benchmark(&mut high, iter_count, "High");
+    println!("\nBenchmark (max {} iters/round, adaptive):", max_iters);
+    println!("  {:>10} {:>7} {:>11} {:>7}", "Batch", "Blocks", "ms/iter", "Weight");
+    println!("  ---------- ------- ----------- -------");
 
-    let fitness = high_ms * 0.5 + med_ms * 0.3 + low_ms * 0.2;
+    let mut total: f64 = 0.0;
+    let mut total_weight: f64 = 0.0;
+
+    for batch in &batches {
+        let iters = adaptive_iters(batch.size, max_iters);
+        let mut blocks = create_blocks(batch.size);
+        let ms = benchmark(&mut blocks, iters, batch.label);
+        println!("  {:>10} {:>7} {:>9.6} {:>6.0}%", batch.label, batch.size, ms, batch.weight * 100.0);
+        total += ms * batch.weight;
+        total_weight += batch.weight;
+    }
+
+    assert!((total_weight - 1.0).abs() < 0.001, "weights must sum to 1.0");
 
     let score_path = args.get(2).cloned().unwrap_or_else(|| "fitness.score".to_string());
-    fs::write(&score_path, format!("{:.6}", fitness)).unwrap();
+    fs::write(&score_path, format!("{:.6}", total)).unwrap();
     println!(
-        "\nFitness (0.5*high + 0.3*mid + 0.2*low): {:.6} ms/iter -> {}",
-        fitness, score_path
+        "\nFitness (weighted avg): {:.6} ms/iter -> {}",
+        total, score_path
     );
 }

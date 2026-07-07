@@ -44,7 +44,6 @@ pub extern "C" fn jpeg_free_info(info: *mut JpegInfo) {
 #[no_mangle]
 pub extern "C" fn dct_2d(block: *mut c_double) {
     let slice = unsafe { std::slice::from_raw_parts_mut(block, 64) };
-    // Work directly on the slice to avoid a copy (eliminates 128 B copy per call).
     let arr: &mut [f64; 64] = slice.try_into().unwrap();
     dct::fdct_2d(arr);
 }
@@ -57,10 +56,10 @@ pub extern "C" fn idct_2d(block: *mut c_double) {
 }
 
 // ── GPU auto-dispatch threshold ──
-// Batches ≥ 500 blocks are routed to GPU (when available) to amortize
+// Batches ≥ this size are routed to GPU (when available) to amortize
 // PCIe transfer latency. Smaller batches use the CPU to avoid the
-// ~100–500 µs GPU setup tax. This threshold is tuned for the weighted
-// benchmark (10/200/10000 blocks).
+// ~100–500 µs GPU setup tax. Tuned for the benchmark batch sizes:
+// 10/250/1K/5K/25K/250K blocks with weights 3/7/10/10/20/50%.
 const GPU_THRESHOLD: usize = 500;
 
 /// Lazily-initialized GPU kernel (or CPU fallback).
@@ -83,6 +82,33 @@ fn gpu_kernel() -> &'static Option<Box<dyn gpu::GpuKernel>> {
     })
 }
 
+/// Const-generic batch IDCT — monomorphizes at compile time.
+///
+/// When `N > 0`, the batch size is known at compile time and the GPU threshold
+/// check (`N >= GPU_THRESHOLD`) is constant-folded by LLVM, eliminating the
+/// branch entirely.  When `N == 0`, the actual block count is used at runtime.
+#[inline(always)]
+pub fn idct_2d_batch_const<const N: usize>(blocks: &mut [[f64; 64]]) {
+    debug_assert!(N == 0 || blocks.len() == N,
+        "idct_2d_batch_const: N={} but blocks.len()={}", N, blocks.len());
+
+    let use_gpu = if N > 0 {
+        N >= GPU_THRESHOLD
+    } else {
+        blocks.len() >= GPU_THRESHOLD
+    };
+
+    if use_gpu {
+        if let Some(kernel) = gpu_kernel() {
+            if kernel.batch_idct_2d(blocks).is_ok() {
+                return;
+            }
+        }
+    }
+
+    idct::batch_idct_2d(blocks);
+}
+
 #[no_mangle]
 pub extern "C" fn idct_2d_batch(blocks: *mut c_double, count: u32) {
     let n = count as usize;
@@ -91,18 +117,7 @@ pub extern "C" fn idct_2d_batch(blocks: *mut c_double, count: u32) {
         std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut [f64; 64], n)
     };
 
-    // Route large batches through GPU kernel (if available).
-    if n >= GPU_THRESHOLD {
-        if let Some(kernel) = gpu_kernel() {
-            if kernel.batch_idct_2d(blocks).is_ok() {
-                return;
-            }
-        }
-    }
-
-    // CPU path: handles small batches directly, and is the fallback
-    // when GPU is unavailable or the batch is below threshold.
-    idct::batch_idct_2d(blocks);
+    idct_2d_batch_const::<0>(blocks);
 }
 
 #[no_mangle]

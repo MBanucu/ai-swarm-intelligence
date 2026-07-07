@@ -34,9 +34,13 @@
             python3Packages.psutil
             ocl-icd
             opencl-headers
+            intel-compute-runtime-legacy1
+            clinfo
           ];
 
           shellHook = ''
+            export OCL_ICD_VENDORS="${pkgs.intel-compute-runtime-legacy1}/etc/OpenCL/vendors"
+            export LD_LIBRARY_PATH="${pkgs.ocl-icd}/lib:${pkgs.intel-compute-runtime-legacy1}/lib:$LD_LIBRARY_PATH"
             echo "[swarm] GPU evolution sandbox ready — $(python3 --version)"
           '';
         };
