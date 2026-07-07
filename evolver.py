@@ -279,6 +279,22 @@ def main():
     with open(GEN_FILE) as f:
         gen = int(f.read().strip())
 
+    prev_best = None
+    if gen > 1 and os.path.exists(BENCHMARK_HISTORY):
+        with open(BENCHMARK_HISTORY) as f:
+            for line in f:
+                if line.strip().startswith(f"| Gen {gen - 1}"):
+                    parts = [p.strip() for p in line.split("|")]
+                    if len(parts) >= 4:
+                        try:
+                            prev_best = float(parts[3].rstrip("ms"))
+                        except ValueError:
+                            pass
+                    break
+
+    if prev_best is not None:
+        print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.6f}ms/iter")
+
     gen_dir = os.path.join(ROOT_DIR, "generations", f"gen_{gen}")
     os.makedirs(gen_dir, exist_ok=True)
 
@@ -317,20 +333,23 @@ def main():
         wait_for_cpu(SPAWN_THRESHOLD)
 
         if child.run_lifecycle():
-            best_score = child.score
-            winner_dir = child.dir
-            winner_attempt = attempt
+            if child.score < best_score:
+                best_score = child.score
+                winner_dir = child.dir
+                winner_attempt = attempt
+                print()
+                print(f">>> NEW BEST on attempt {attempt}: {best_score:.6f}ms/iter")
+            else:
+                print()
+                print(f"    Survived on attempt {attempt}: {child.score:.6f}ms/iter (best: {best_score:.6f})")
+        else:
+            failure = _collect_failure(child)
+            sibling_failures.append(failure)
+            _save_failure(failure_dir, attempt, failure)
+
             print()
-            print(f">>> SURVIVOR FOUND on attempt {attempt}: {best_score:.6f}ms/iter")
-            break
-
-        failure = _collect_failure(child)
-        sibling_failures.append(failure)
-        _save_failure(failure_dir, attempt, failure)
-
-        print()
-        print(f"EXTINCTION on attempt {attempt}: {failure['reason']}")
-        print("Breeding fresh child...")
+            print(f"EXTINCTION on attempt {attempt}: {failure['reason']}")
+            print("Breeding fresh child...")
 
     if winner_dir is None:
         print()
@@ -340,6 +359,13 @@ def main():
 
     print()
     print(f">>> WINNER: Attempt {winner_attempt} — {best_score:.6f}ms/iter")
+
+    if prev_best is not None and best_score >= prev_best:
+        print()
+        print(f"[swarm] REGRESSION: winner {best_score:.6f}ms >= previous {prev_best:.6f}ms")
+        print(f"[swarm] ABORTING generation {gen} — no improvement. Re-run for fresh mutations.")
+        sys.exit(1)
+
     print()
 
     if os.path.exists(BASE_CODE):
