@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+from datetime import datetime, timezone
 import shutil
 import subprocess
 
@@ -371,7 +372,7 @@ def main():
     )
 
     with open(BENCHMARK_HISTORY, "a") as f:
-        ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        ts = datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
         f.write(
             f"| Gen {gen} | Attempt {winner_attempt}"
             f" | {best_score:.6f}ms | {ts} |\n"
