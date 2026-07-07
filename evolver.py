@@ -109,6 +109,12 @@ class ChildProcess:
             f" Changing it would invalidate fitness and crash the benchmark.\n"
             f"- src/lib.rs FFI signatures: changing idct_2d_batch signature"
             f" breaks the benchmark binary.\n\n"
+            f"CRITICAL: ACTUALLY READ THE CODE before recommending.\n"
+            f"Check Cargo.toml feature flags match what code expects.\n"
+            f"Check GPU kernel source compiles with the target OpenCL runtime.\n"
+            f"Check that Send+Sync bounds are satisfied for GPU dispatch types.\n"
+            f"Look for mismatches between features in Cargo.toml and"
+            f" #[cfg(feature=...)] guards in source code.\n\n"
             f"Output ONLY the raw markdown content for the analysis file."
         )
 
