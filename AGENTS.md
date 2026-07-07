@@ -48,7 +48,7 @@ logs/
 
 - **`permission: allow` must be a single line** in any agent `.md` file. Never expand it into granular rules — child agents die from auto-rejected bash commands if this rule breaks.
 - **Never do `git checkout` or `rm -rf generations/`.** The evolver manages git state. `git checkout -f main` wipes uncommitted fixes. `generations/` is gitignored but contains the only record of each child's work.
-- **`root src/` and `tests/` are stale.** They're the original Gen 0 code. The evolver reads from `base_code/`, not the root directories. Don't edit root `src/dct_engine.py` expecting it to affect evolution.
+
 - **Gen 2 is missing from benchmark_history.md** — it was lost during a git reset. That gap is intentional, not a bug to fix.
 - **No pytest.** Tests use Python's built-in `unittest`. `pytest` commands will fail unless installed separately.
 - **CPU core isolation is hardcoded:** workers on cores 0-2, benchmarks on core 3. Only works on ≥4-core machines.
