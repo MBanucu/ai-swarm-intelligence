@@ -333,7 +333,14 @@ def main():
         wait_for_cpu(SPAWN_THRESHOLD)
 
         if child.run_lifecycle():
-            if child.score < best_score:
+            if prev_best is not None and child.score >= prev_best:
+                failure = {"attempt": child.attempt,
+                           "reason": f"regression ({child.score:.6f}ms >= prev {prev_best:.6f}ms)"}
+                sibling_failures.append(failure)
+                _save_failure(failure_dir, attempt, failure)
+                print()
+                print(f"REGRESSION on attempt {attempt}: {child.score:.6f}ms >= previous gen {prev_best:.6f}ms")
+            elif child.score < best_score:
                 best_score = child.score
                 winner_dir = child.dir
                 winner_attempt = attempt
