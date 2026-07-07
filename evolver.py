@@ -280,17 +280,18 @@ class ChildProcess:
 
 def _run_baseline():
     engine_dir = os.path.join(BASE_CODE, "src", "jpeg_engine")
-    result = subprocess.run(
+    proc = subprocess.Popen(
         ["cargo", "run", "--release", "--features", "gpu", "--bin", "bench", "--", "5000", "/dev/stdout"],
-        cwd=engine_dir, capture_output=True, text=True,
+        cwd=engine_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
-    if result.stdout:
-        print(result.stdout, end="", flush=True)
-    if result.stderr:
-        print(result.stderr, end="", flush=True)
-    if result.returncode != 0:
+    output_lines = []
+    for line in proc.stdout:
+        output_lines.append(line)
+        print(line, end="", flush=True)
+    proc.wait()
+    if proc.returncode != 0:
         return None
-    for line in result.stdout.rsplit("\n"):
+    for line in reversed(output_lines):
         if "Fitness" in line:
             try:
                 parts = line.split()
