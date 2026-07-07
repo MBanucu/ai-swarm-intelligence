@@ -200,10 +200,14 @@ class ChildProcess:
             f" via OpenCL, Vulkan, or CUDA. Use the 'gpu' Cargo feature.\n"
             f"   ENVIRONMENT: 'cargo' and 'rustc' are on PATH."
             f" You are already inside the correct shell.\n"
-            f"4) Run 'cargo test --release' from src/jpeg_engine/"
+            f"4) Run 'cargo test --release --features gpu' from src/jpeg_engine/"
             f" to confirm all tests pass.\n"
-            f"5) Note: the orchestrator handles the final benchmark."
-            f" You do NOT need to run bench or write fitness.score."
+            f"5) Run 'cargo run --release --features gpu --bin bench -- 100 fitness.score'"
+            f" to VALIDATE YOUR CHANGES WORK."
+            f" You MUST run this yourself to check performance improves."
+            f" If the benchmark shows regression, debug and fix it before finishing.\n"
+            f"6) Note: the orchestrator runs the final benchmark separately."
+            f" Your self-benchmark is for your own validation only."
         )
         if self.sibling_failures:
             prompt += f"\n\n## Previous Sibling Failures (DO NOT REPEAT)\n"
