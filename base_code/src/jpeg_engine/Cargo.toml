@@ -1,0 +1,29 @@
+[package]
+name = "jpeg_engine"
+version = "0.1.0"
+edition = "2021"
+description = "JPEG decode pipeline: header, huffman, DCT, IDCT, scaling. GPU-aware."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "jpeg_engine"
+
+[features]
+default = []
+gpu = []
+cuda = []
+opencl = []
+
+[dependencies]
+rand = "0.8"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# GPU acceleration via OpenCL — works with NVIDIA, AMD, Intel GPUs
+ocl = { version = "0.19", optional = true }
+# Vulkan compute — modern GPU API for all vendors
+vulkano = { version = "0.34", optional = true }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3

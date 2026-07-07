@@ -4,3 +4,4 @@ __pycache__/
 generations/
 *.log
 *.score
+target/
