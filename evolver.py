@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
 import os
 import sys
-import time
 from datetime import datetime, timezone
 import shutil
 import subprocess
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
 MAX_RETRIES = 10
-SPAWN_THRESHOLD = 60.0
-WORKER_CORES = [0, 1, 2]
-BENCH_CORE = 3
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 GEN_FILE = os.path.join(ROOT_DIR, "logs", "current_gen.txt")
@@ -25,11 +16,10 @@ BENCHMARK_HISTORY = os.path.join(ROOT_DIR, "logs", "benchmark_history.md")
 
 
 class ChildProcess:
-    def __init__(self, attempt, gen, gen_dir, worker_core, parent_agent_path):
+    def __init__(self, attempt, gen, gen_dir, parent_agent_path):
         self.attempt = attempt
         self.gen = gen
         self.dir = os.path.join(gen_dir, f"child_{attempt}")
-        self.core = worker_core
         self.parent_agent_path = parent_agent_path
         self.score = 999.9
         self.sibling_failures = []
@@ -53,20 +43,20 @@ class ChildProcess:
 
     def run_lifecycle(self):
         self.setup()
-        print(f"[Attempt {self.attempt}] Analyzing past generations (core {self.core})...", flush=True)
+        print(f"[Attempt {self.attempt}] Analyzing past generations...", flush=True)
         print(f"    logs -> {self.dir}/analysis.log", flush=True)
         self._analyze()
-        print(f"[Attempt {self.attempt}] Creating mutation agent (core {self.core})...", flush=True)
+        print(f"[Attempt {self.attempt}] Creating mutation agent...", flush=True)
         print(f"    logs -> {self.dir}/mutation.log", flush=True)
         if not self._breed():
             print(f"  [Attempt {self.attempt}] Mutation failed", flush=True)
             return False
-        print(f"[Attempt {self.attempt}] Spawning lifecycle (core {self.core})...", flush=True)
+        print(f"[Attempt {self.attempt}] Spawning lifecycle...", flush=True)
         print(f"    logs -> {self.dir}/lifecycle.log", flush=True)
         if not self._optimize():
             print(f"  [Attempt {self.attempt}] Lifecycle failed", flush=True)
             return False
-        print(f"[Attempt {self.attempt}] Running fitness benchmark (core {BENCH_CORE})...", flush=True)
+        print(f"[Attempt {self.attempt}] Running fitness benchmark...", flush=True)
         return self._benchmark()
 
     def _analyze(self):
@@ -110,17 +100,18 @@ class ChildProcess:
             f"- The benchmark tests 3 batch sizes: low (10 blocks), medium (200),"
             f" high (10000 blocks).\n"
             f"- Fitness = 0.5*high + 0.3*mid + 0.2*low (lower is better).\n"
-            f"- GPU acceleration (OpenCL/Vulkan/CUDA) excels on large batches."
+            f"- GPU acceleration (OpenCL) excels on large batches."
             f" Implement GPU kernels via the GpuKernel trait in gpu.rs.\n"
             f"- CPU path excels on small batches (low overhead, no kernel launch cost).\n"
-            f"- The winning solution SHOULD auto-select between CPU and GPU"
-            f" based on batch size: use CPU for small data, GPU for large data.\n"
-            f"- These are complementary paths — recommend implementing BOTH.\n\n"
+            f"- CPU parallelism (rayon, thread pools) is viable for medium/large batches"
+            f" — the benchmark runs on all cores, not pinned to one.\n"
+            f"- The winning solution SHOULD auto-select: CPU for small,"
+            f" parallel CPU or GPU for large, based on batch size.\n"
+            f"- These are complementary paths — recommend implementing multiple.\n\n"
             f"Output ONLY the raw markdown content for the analysis file."
         )
 
         cmd = [
-            "taskset", "-c", str(self.core),
             "unbuffer", "opencode",
             "--model", "opencode-go/deepseek-v4-flash",
             "run", "--share", "--thinking", prompt,
@@ -176,7 +167,6 @@ class ChildProcess:
             f"Output ONLY the raw markdown content."
         )
         cmd = [
-            "taskset", "-c", str(self.core),
             "unbuffer", "opencode",
             "--model", "opencode-go/deepseek-v4-flash",
             "run", "--share", "--thinking", prompt,
@@ -228,7 +218,6 @@ class ChildProcess:
                         prompt += f"  {chr(10).join('  ' + l for l in lines)}\n"
             prompt += "\nAnalyze these failures and choose a DIFFERENT approach."
         cmd = [
-            "taskset", "-c", str(self.core),
             "unbuffer", "opencode",
             "--model", "opencode-go/deepseek-v4-flash",
             "--agent", "dct-evolver",
@@ -264,8 +253,7 @@ class ChildProcess:
         print(f"  [Attempt {self.attempt}] Running cargo bench...")
         bench_path = os.path.join(self.dir, "fitness.score")
         bench_result = subprocess.run(
-            ["taskset", "-c", str(BENCH_CORE),
-             "cargo", "run", "--release", "--bin", "bench", "--",
+            ["cargo", "run", "--release", "--bin", "bench", "--",
              "5000", bench_path],
             cwd=engine_dir, capture_output=True, text=True,
         )
@@ -293,17 +281,6 @@ class ChildProcess:
         self.score = score
         return True
 
-
-def wait_for_cpu(headroom):
-    if psutil is None:
-        time.sleep(2)
-        return
-    psutil.cpu_percent(interval=None)
-    while True:
-        load = psutil.cpu_percent(interval=2.0)
-        if load < headroom:
-            return
-        print(f"  CPU at {load:.0f}%, waiting for headroom < {headroom:.0f}%...")
 
 
 def _collect_failure(child):
@@ -386,7 +363,6 @@ def main():
 
     print("=" * 80)
     print(f"  EVOLUTIONARY SWARM — Generation {gen}")
-    print(f"  Worker cores: {WORKER_CORES} | Benchmark core: {BENCH_CORE}")
     print("=" * 80)
     print()
 
@@ -403,14 +379,12 @@ def main():
         print(f"  Generation {gen} — Attempt {attempt} of {MAX_RETRIES}")
         print("=" * 70)
 
-        core = WORKER_CORES[(attempt - 1) % len(WORKER_CORES)]
-        child = ChildProcess(attempt, gen, gen_dir, core, parent_agent)
+        child = ChildProcess(attempt, gen, gen_dir, parent_agent)
         child.sibling_failures = sibling_failures.copy()
         child.failure_dir = failure_dir
 
-        print(f"\n--- Attempt {attempt} on core {core} ---", flush=True)
+        print(f"\n--- Attempt {attempt} ---", flush=True)
         print(f"    dir: {child.dir}", flush=True)
-        wait_for_cpu(SPAWN_THRESHOLD)
 
         if child.run_lifecycle():
             if prev_best is not None and child.score >= prev_best:
