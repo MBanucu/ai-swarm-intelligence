@@ -2,7 +2,7 @@
 /// Implementations may use OpenCL, Vulkan, or CUDA.
 /// CPU fallback always available.
 
-pub trait GpuKernel: Send {
+pub trait GpuKernel: Send + Sync {
     fn batch_idct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError>;
     fn batch_dct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError>;
     fn batch_ycbcr_to_rgb(

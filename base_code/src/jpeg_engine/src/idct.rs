@@ -30,6 +30,12 @@ const O: [[f64; 4]; 4] = [
 ];
 
 /// 1‑D IDCT — even/odd decomposition.
+///
+/// The 4×4 mat-vec is written as plain scalar loops so LLVM's auto-vectorizer
+/// can generate optimal SIMD (AVX/FMA when target features are enabled via
+/// `.cargo/config.toml`). Manual intrinsics would block other compiler
+/// optimisations like loop unrolling, register renaming, and instruction
+/// scheduling.
 #[inline(always)]
 fn idct_1d(src: &[f64; 8]) -> [f64; 8] {
     let s0 = src[0]; let s1 = src[1]; let s2 = src[2]; let s3 = src[3];
@@ -71,6 +77,9 @@ fn idct_1d(src: &[f64; 8]) -> [f64; 8] {
 /// The column pass still writes to `block` in the standard row‑major
 /// layout (same as before).
 pub fn idct_2d(block: &mut [f64; 64]) {
+    // Temporary buffer for transposed row results.
+    // Inlined with `idct_1d_avx` the compiler keeps accesses register‑local
+    // and avoids redundant zeroing since every element is written before read.
     let mut tmp = [0.0f64; 64];
 
     // ── Pass 1: IDCT on rows, store TRANSPOSED into tmp ──
@@ -113,15 +122,28 @@ pub fn idct_2d(block: &mut [f64; 64]) {
     }
 }
 
-/// Multi‑block batched IDCT — processes blocks via raw pointer.
+/// Multi‑block batched IDCT — processes blocks with optional parallelism.
 pub fn batch_idct_2d(blocks: &mut [[f64; 64]]) {
     let n = blocks.len();
     if n == 0 {
         return;
     }
-    let ptr = blocks.as_mut_ptr();
-    for i in 0..n {
-        unsafe { idct_2d(&mut *ptr.add(i)); }
+    #[cfg(feature = "rayon")]
+    {
+        use rayon::prelude::*;
+        // Process 4 blocks per worker chunk for good cache utilization
+        blocks.par_chunks_mut(4).for_each(|chunk| {
+            for block in chunk {
+                idct_2d(block);
+            }
+        });
+    }
+    #[cfg(not(feature = "rayon"))]
+    {
+        let ptr = blocks.as_mut_ptr();
+        for i in 0..n {
+            unsafe { idct_2d(&mut *ptr.add(i)); }
+        }
     }
 }
 

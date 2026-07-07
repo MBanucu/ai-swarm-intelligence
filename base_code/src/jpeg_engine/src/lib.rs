@@ -6,6 +6,7 @@ pub mod scaling;
 pub mod gpu;
 
 use std::os::raw::c_double;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct JpegInfo {
@@ -55,6 +56,33 @@ pub extern "C" fn idct_2d(block: *mut c_double) {
     idct::idct_2d(arr);
 }
 
+// ── GPU auto-dispatch threshold ──
+// Batches ≥ 500 blocks are routed to GPU (when available) to amortize
+// PCIe transfer latency. Smaller batches use the CPU to avoid the
+// ~100–500 µs GPU setup tax. This threshold is tuned for the weighted
+// benchmark (10/200/10000 blocks).
+const GPU_THRESHOLD: usize = 500;
+
+/// Lazily-initialized GPU kernel (or CPU fallback).
+fn gpu_kernel() -> &'static Option<Box<dyn gpu::GpuKernel>> {
+    static KERNEL: OnceLock<Option<Box<dyn gpu::GpuKernel>>> = OnceLock::new();
+    KERNEL.get_or_init(|| {
+        #[cfg(feature = "gpu")]
+        {
+            let k = gpu::create_kernel();
+            if k.device_name() != "CPU" {
+                eprintln!("[jpeg_engine] GPU auto-dispatch enabled: {}", k.device_name());
+                Some(k)
+            } else {
+                eprintln!("[jpeg_engine] GPU not available, using CPU for all batches");
+                None
+            }
+        }
+        #[cfg(not(feature = "gpu"))]
+        None
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn idct_2d_batch(blocks: *mut c_double, count: u32) {
     let n = count as usize;
@@ -62,6 +90,18 @@ pub extern "C" fn idct_2d_batch(blocks: *mut c_double, count: u32) {
     let blocks: &mut [[f64; 64]] = unsafe {
         std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut [f64; 64], n)
     };
+
+    // Route large batches through GPU kernel (if available).
+    if n >= GPU_THRESHOLD {
+        if let Some(kernel) = gpu_kernel() {
+            if kernel.batch_idct_2d(blocks).is_ok() {
+                return;
+            }
+        }
+    }
+
+    // CPU path: handles small batches directly, and is the fallback
+    // when GPU is unavailable or the batch is below threshold.
     idct::batch_idct_2d(blocks);
 }
 

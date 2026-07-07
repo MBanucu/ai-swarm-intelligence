@@ -1,6 +1,6 @@
-# Enable FMA + SSE4.2 for fast double-precision math without AVX2 downclocking
-# FMA on 128-bit (XMM) registers avoids the voltage/frequency transition
-# that 256-bit AVX/AVX2 instructions trigger on mobile CPUs.
+# Enable FMA + SSE4.2 + AVX for fast double-precision math.
+# AVX on 256-bit (YMM) registers provides 2× throughput for f64 ops.
+# FMA fused multiply-add halves instruction count for inner products.
 # SSE4.2 enables fast CRC and other SIMD convenience ops.
 [target.'cfg(all())']
-rustflags = ["-C", "target-feature=+fma,+sse4.2"]
+rustflags = ["-C", "target-feature=+avx,+fma,+sse4.2"]
