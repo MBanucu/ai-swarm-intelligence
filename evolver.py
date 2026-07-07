@@ -229,7 +229,7 @@ class ChildProcess:
 
         print(f"  [Attempt {self.attempt}] Running cargo test...")
         test_result = subprocess.run(
-            ["cargo", "test", "--release"],
+            ["cargo", "test", "--release", "--features", "gpu"],
             cwd=engine_dir, capture_output=True, text=True,
         )
         test_log = os.path.join(self.dir, "test_output.log")
@@ -249,7 +249,7 @@ class ChildProcess:
         print(f"  [Attempt {self.attempt}] Running cargo bench...")
         bench_path = os.path.join(self.dir, "fitness.score")
         bench_result = subprocess.run(
-            ["cargo", "run", "--release", "--bin", "bench", "--",
+            ["cargo", "run", "--release", "--features", "gpu", "--bin", "bench", "--",
              "5000", bench_path],
             cwd=engine_dir, capture_output=True, text=True,
         )
@@ -281,7 +281,7 @@ class ChildProcess:
 def _run_baseline():
     engine_dir = os.path.join(BASE_CODE, "src", "jpeg_engine")
     result = subprocess.run(
-        ["cargo", "run", "--release", "--bin", "bench", "--", "5000", "/dev/stdout"],
+        ["cargo", "run", "--release", "--features", "gpu", "--bin", "bench", "--", "5000", "/dev/stdout"],
         cwd=engine_dir, capture_output=True, text=True,
     )
     if result.returncode != 0:
