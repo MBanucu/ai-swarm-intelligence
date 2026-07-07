@@ -31,7 +31,7 @@ generations/gen_N/child_X/       # Per-attempt isolated sandbox (in .gitignore)
   fitness.score                    # Median ms/iter (lower wins)
 
 logs/
-  current_gen.txt                # Generation counter (integer)
+  current_gen.json                # Generation + attempt counter (resumable)
   benchmark_history.md           # Phylogenetic performance ledger
   archived_agents/               # Winner genomes for generational continuity
 ```

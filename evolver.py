@@ -2,13 +2,14 @@
 import os
 import sys
 from datetime import datetime, timezone
+import json
 import shutil
 import subprocess
 
 MAX_RETRIES = 10
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-GEN_FILE = os.path.join(ROOT_DIR, "logs", "current_gen.txt")
+GEN_FILE = os.path.join(ROOT_DIR, "logs", "current_gen.json")
 BASE_CODE = os.path.join(ROOT_DIR, "base_code")
 ARCHIVE_DIR = os.path.join(ROOT_DIR, "logs", "archived_agents")
 BASE_TEMPLATE = os.path.join(ROOT_DIR, ".opencode", "agents", "base_template.md")
@@ -387,16 +388,37 @@ def _tail_lines(text, n):
     return "\n".join(lines[-n:])
 
 
+def _save_state(gen, attempt, best_score=None):
+    state = {
+        "generation": gen,
+        "attempt": attempt,
+    }
+    if best_score is not None:
+        state["best_score"] = best_score
+    with open(GEN_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+        f.write("\n")
+
+
 def main():
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(os.path.join(ROOT_DIR, "logs"), exist_ok=True)
 
     if not os.path.exists(GEN_FILE):
-        with open(GEN_FILE, "w") as f:
-            f.write("1")
+        # Migrate from old txt format if present
+        old_file = os.path.join(ROOT_DIR, "logs", "current_gen.txt")
+        if os.path.exists(old_file):
+            with open(old_file) as f:
+                gen = int(f.read().strip())
+            _save_state(gen, 1)
+            os.remove(old_file)
+        else:
+            _save_state(1, 1)
 
     with open(GEN_FILE) as f:
-        gen = int(f.read().strip())
+        state = json.load(f)
+    gen = state["generation"]
+    start_attempt = state.get("attempt", 1)
 
     prev_best = None
     if gen > 1 and os.path.exists(BENCHMARK_HISTORY):
@@ -446,7 +468,7 @@ def main():
     failure_dir = os.path.join(gen_dir, "failures")
     os.makedirs(failure_dir, exist_ok=True)
 
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(start_attempt, MAX_RETRIES + 1):
         print()
         print("=" * 70)
         print(f"  Generation {gen} — Attempt {attempt} of {MAX_RETRIES}")
@@ -465,27 +487,32 @@ def main():
                            "reason": f"regression ({child.score:.6f}ms >= prev {prev_best:.6f}ms)"}
                 sibling_failures.append(failure)
                 _save_failure(failure_dir, attempt, failure)
+                _save_state(gen, attempt + 1)
                 print()
                 print(f"REGRESSION on attempt {attempt}: {child.score:.6f}ms >= previous gen {prev_best:.6f}ms")
             elif child.score < best_score:
                 best_score = child.score
                 winner_dir = child.dir
                 winner_attempt = attempt
+                _save_state(gen, attempt + 1)
                 print()
                 print(f">>> NEW BEST on attempt {attempt}: {best_score:.6f}ms/iter")
             else:
+                _save_state(gen, attempt + 1)
                 print()
                 print(f"    Survived on attempt {attempt}: {child.score:.6f}ms/iter (best: {best_score:.6f})")
         else:
             failure = _collect_failure(child)
             sibling_failures.append(failure)
             _save_failure(failure_dir, attempt, failure)
+            _save_state(gen, attempt + 1)
 
             print()
             print(f"EXTINCTION on attempt {attempt}: {failure['reason']}")
             print("Breeding fresh child...")
 
     if winner_dir is None:
+        _save_state(gen, 1)
         print()
         print(f"FINAL EXTINCTION: All {MAX_RETRIES} attempts failed for Generation {gen}.")
         print("Re-running generation...")
@@ -589,8 +616,7 @@ def main():
                     stderr=subprocess.DEVNULL,
                 )
 
-    with open(GEN_FILE, "w") as f:
-        f.write(str(gen + 1))
+    _save_state(gen + 1, 1)
 
     print()
     print(
