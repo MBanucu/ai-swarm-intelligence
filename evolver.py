@@ -115,13 +115,19 @@ class ChildProcess:
             "--model", "opencode-go/deepseek-v4-flash",
             "run", "--share", "--thinking", prompt,
         ]
-        with open(os.path.join(self.dir, "analysis.log"), "w") as f:
-            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-        if result.returncode != 0 or not os.path.exists(self.analysis_path):
-            print(f"  [Attempt {self.attempt}] Analysis step failed — continuing without it",
+        log_path = os.path.join(self.dir, "analysis.log")
+        with open(log_path, "w") as log:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in proc.stdout:
+                log.write(line)
+                log.flush()
+                print(line, end="", flush=True)
+            proc.wait()
+        if proc.returncode != 0 or not os.path.exists(self.analysis_path):
+            print(f"[Attempt {self.attempt}] Analysis step failed — continuing without it",
                   flush=True)
             return
-        print(f"  [Attempt {self.attempt}] Analysis complete -> {self.analysis_path}",
+        print(f"[Attempt {self.attempt}] Analysis complete -> {self.analysis_path}",
               flush=True)
 
     def _breed(self):
