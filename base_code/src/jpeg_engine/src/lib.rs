@@ -43,19 +43,17 @@ pub extern "C" fn jpeg_free_info(info: *mut JpegInfo) {
 #[no_mangle]
 pub extern "C" fn dct_2d(block: *mut c_double) {
     let slice = unsafe { std::slice::from_raw_parts_mut(block, 64) };
-    let mut arr = [0.0f64; 64];
-    arr.copy_from_slice(slice);
-    dct::fdct_2d(&mut arr);
-    slice.copy_from_slice(&arr);
+    // Work directly on the slice to avoid a copy (eliminates 128 B copy per call).
+    let arr: &mut [f64; 64] = slice.try_into().unwrap();
+    dct::fdct_2d(arr);
 }
 
 #[no_mangle]
 pub extern "C" fn idct_2d(block: *mut c_double) {
     let slice = unsafe { std::slice::from_raw_parts_mut(block, 64) };
-    let mut arr = [0.0f64; 64];
-    arr.copy_from_slice(slice);
-    idct::idct_2d(&mut arr);
-    slice.copy_from_slice(&arr);
+    // Work directly on the slice — no intermediate copy.
+    let arr: &mut [f64; 64] = slice.try_into().unwrap();
+    idct::idct_2d(arr);
 }
 
 #[no_mangle]
