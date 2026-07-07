@@ -1,13 +1,23 @@
 use jpeg_engine::idct_2d_batch;
+use rand::Rng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use std::env;
 use std::fs;
 use std::time::Instant;
 
 fn create_blocks(count: usize) -> Vec<[f64; 64]> {
-    (0..count).map(|i| {
+    let mut rng = StdRng::seed_from_u64(0xdead_beef_cafe_babe);
+    (0..count).map(|_| {
         let mut b = [0.0f64; 64];
-        for j in 0..64 {
-            b[j] = (i as f64 * j as f64 % 256.0) - 128.0;
+        let dc = (rng.gen::<f64>() - 0.5) * 2048.0;
+        let dc_q = 8.0;
+        b[0] = (dc / dc_q).round() * dc_q;
+        for j in 1..64 {
+            let scale = 256.0 / (j as f64).sqrt();
+            let val = (rng.gen::<f64>() - 0.5) * 2.0 * scale;
+            let q = (j as f64 / 8.0 + 1.0) * 4.0;
+            b[j] = (val / q).round() * q;
         }
         b
     }).collect()
