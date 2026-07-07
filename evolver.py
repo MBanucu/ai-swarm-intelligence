@@ -276,6 +276,23 @@ class ChildProcess:
         return True
 
 
+def _run_baseline():
+    engine_dir = os.path.join(BASE_CODE, "src", "jpeg_engine")
+    result = subprocess.run(
+        ["cargo", "run", "--release", "--bin", "bench", "--", "5000", "/dev/stdout"],
+        cwd=engine_dir, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.split("\n"):
+        if "Fitness" in line:
+            try:
+                parts = line.split()
+                return float(parts[2])
+            except (IndexError, ValueError):
+                pass
+    return None
+
 
 def _collect_failure(child):
     failure = {"attempt": child.attempt, "reason": "unknown"}
@@ -345,6 +362,17 @@ def main():
 
     if prev_best is not None:
         print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.6f}ms/iter")
+
+    print("[swarm] Running baseline benchmark on parent code...")
+    baseline = _run_baseline()
+    if baseline is not None:
+        print(f"[swarm] Baseline: {baseline:.6f}ms/iter")
+        if prev_best is None:
+            prev_best = baseline
+        elif baseline < prev_best:
+            print(f"[swarm] Basline {baseline:.6f} < previous {prev_best:.6f} — tightening floor")
+            prev_best = baseline
+    print()
 
     gen_dir = os.path.join(ROOT_DIR, "generations", f"gen_{gen}")
     os.makedirs(gen_dir, exist_ok=True)
