@@ -106,6 +106,12 @@ class ChildProcess:
             f"## Strategies to AVOID\n"
             f"- Approaches that failed in past generations\n"
             f"- Anti-patterns that caused test failures or regressions\n\n"
+            f"IMPORTANT CONTEXT:\n"
+            f"- GPU acceleration (OpenCL/Vulkan/CUDA) is GOOD for batch processing."
+            f" The engine has a GpuKernel trait — implement it.\n"
+            f"- CPU optimizations are GOOD for small/individual block processing.\n"
+            f"- These are complementary, not mutually exclusive."
+            f" Recommend BOTH paths where applicable.\n\n"
             f"Output ONLY the raw markdown content for the analysis file."
         )
 
