@@ -37,16 +37,25 @@ impl GpuKernel for CpuKernel {
     /// Batch IDCT — uses slice chunking for better cache locality
     /// and less pointer-chasing overhead vs individual block processing.
     fn batch_idct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError> {
-        // Process via flat slice to help auto‑vectorisation
         let len = blocks.len();
         if len == 0 {
             return Ok(());
         }
-        // Use ptr-based iteration to eliminate bounds checks
-        let ptr = blocks.as_mut_ptr();
-        for i in 0..len {
-            unsafe {
-                crate::idct::idct_2d(&mut *ptr.add(i));
+        // Use rayon parallelism for large batches (gated behind cfg feature).
+        #[cfg(feature = "rayon")]
+        {
+            use rayon::prelude::*;
+            blocks.par_iter_mut().for_each(|block| {
+                crate::idct::idct_2d(block);
+            });
+        }
+        #[cfg(not(feature = "rayon"))]
+        {
+            let ptr = blocks.as_mut_ptr();
+            for i in 0..len {
+                unsafe {
+                    crate::idct::idct_2d(&mut *ptr.add(i));
+                }
             }
         }
         Ok(())
@@ -57,10 +66,20 @@ impl GpuKernel for CpuKernel {
         if len == 0 {
             return Ok(());
         }
-        let ptr = blocks.as_mut_ptr();
-        for i in 0..len {
-            unsafe {
-                crate::dct::fdct_2d(&mut *ptr.add(i));
+        #[cfg(feature = "rayon")]
+        {
+            use rayon::prelude::*;
+            blocks.par_iter_mut().for_each(|block| {
+                crate::dct::fdct_2d(block);
+            });
+        }
+        #[cfg(not(feature = "rayon"))]
+        {
+            let ptr = blocks.as_mut_ptr();
+            for i in 0..len {
+                unsafe {
+                    crate::dct::fdct_2d(&mut *ptr.add(i));
+                }
             }
         }
         Ok(())
@@ -71,7 +90,6 @@ impl GpuKernel for CpuKernel {
         r: &mut [u8], g: &mut [u8], b: &mut [u8],
     ) -> Result<(), GpuError> {
         let n = y.len();
-        // Process in chunks of 8 for better register reuse
         let mut i = 0;
         while i + 8 <= n {
             let (r8, g8, b8) = crate::scaling::ycbcr_to_rgb_8(

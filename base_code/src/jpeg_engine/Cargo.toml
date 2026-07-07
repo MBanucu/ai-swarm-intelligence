@@ -10,12 +10,14 @@ name = "jpeg_engine"
 
 [features]
 default = []
-gpu = ["ocl"]
+gpu = ["ocl", "dep:rayon"]
 cuda = []
 opencl = ["ocl"]
+rayon = ["dep:rayon"]
 
 [dependencies]
 rand = "0.8"
+rayon = { version = "1.8", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # GPU acceleration via OpenCL — works with NVIDIA, AMD, Intel GPUs

@@ -1,3 +1,11 @@
+/// Flat binary trie node for branchless Huffman decoding.
+/// `next` stores either a child index (bit 15 = 0) or a symbol (bit 15 = 1).
+#[derive(Debug, Clone, Default)]
+pub struct FlatTrie {
+    pub nodes: Vec<u16>,   // bit 15 = leaf flag, bits 14-0 = symbol or child index
+}
+
+/// Standard Huffman table (used by `decode_huffman_block` with tree-walk fallback).
 #[derive(Debug, Clone, Default)]
 pub struct HuffmanTable {
     pub id: u8,
@@ -7,6 +15,7 @@ pub struct HuffmanTable {
     pub max_code: [i32; 16],
     pub val_ptr: [i32; 16],
     pub values: Vec<u8>,
+    pub flat_trie: Option<FlatTrie>,   // branchless trie (built lazily)
 }
 
 impl HuffmanTable {
@@ -19,6 +28,7 @@ impl HuffmanTable {
             val_ptr: [-1i32; 16],
             values: values.to_vec(),
             codes: Vec::new(),
+            flat_trie: None,
         };
         table.build_tables(bits);
         table
@@ -38,9 +48,121 @@ impl HuffmanTable {
             code <<= 1;
         }
     }
+
+    /// Build the flat binary trie for branchless decoding.
+    pub fn build_flat_trie(&mut self) {
+        let mut nodes = Vec::new();
+        nodes.push(0u16); // root
+        let mut code: u32 = 0;
+
+        for len in 1..=16 {
+            let count = self.values_in_len(len);
+            for _ in 0..count {
+                // Walk the tree using the current code bits to find where to insert
+                let mut node_idx = 0usize;
+                for bit_pos in (0..len).rev() {
+                    let bit = ((code >> bit_pos) & 1) as usize;
+                    let entry = nodes[node_idx];
+                    if entry & 0x8000 != 0 {
+                        // Leaf where internal node should be — should not happen with valid Huffman
+                        break;
+                    }
+                    let child_offset = entry as usize;
+                    if child_offset == 0 {
+                        // Need to create child
+                        let new_idx = nodes.len();
+                        if node_idx < nodes.len() {
+                            nodes[node_idx] = new_idx as u16;
+                        }
+                        nodes.push(0);
+                        nodes.push(0);
+                        node_idx = new_idx + bit;
+                    } else {
+                        let child_idx = child_offset + bit;
+                        if child_idx >= nodes.len() {
+                            nodes.resize(child_idx + 1, 0);
+                        }
+                        node_idx = child_idx;
+                    }
+                }
+                // Mark as leaf with symbol
+                let sym = self.value_for_code(code, len as u8);
+                if node_idx < nodes.len() {
+                    nodes[node_idx] = 0x8000 | (sym as u16 & 0x7FFF);
+                }
+                code += 1;
+            }
+            code <<= 1;
+        }
+
+        self.flat_trie = Some(FlatTrie { nodes });
+    }
+
+    fn values_in_len(&self, len: usize) -> usize {
+        if len == 0 { return 0; }
+        let hi = self.val_ptr[len - 1];
+        if hi < 0 { return 0; }
+        let count = if len > 1 {
+            let lo = self.val_ptr[len - 2];
+            if lo < 0 { hi + 1 } else { hi - lo }
+        } else {
+            hi + 1
+        };
+        count as usize
+    }
+
+    fn value_for_code(&self, code: u32, len: u8) -> u8 {
+        let idx = len as usize;
+        if idx == 0 || idx > 16 { return 0; }
+        let min = self.min_code[idx - 1];
+        let code_i32 = code as i32;
+        if code_i32 >= min && code_i32 <= self.max_code[idx - 1] {
+            let index = self.val_ptr[idx - 1] + (code_i32 - min);
+            if (index as usize) < self.values.len() {
+                return self.values[index as usize];
+            }
+        }
+        0
+    }
+}
+
+/// Branchless Huffman symbol decode using a flat binary trie.
+///
+/// The trie is stored as a flat array: even indices = "0" child, odd = "1" child.
+/// Bit 15 of an entry marks a leaf; the lower 15 bits contain the symbol.
+/// Returns -1 on error.
+fn decode_symbol_trie(data: &[u8], bit_offset: usize, trie: &[u16]) -> i32 {
+    let mut state = 0u16;          // root node (index 0 = "0" child, index 1 = "1" child)
+    let mut off = bit_offset;
+
+    loop {
+        let byte_idx = off >> 3;
+        if byte_idx >= data.len() {
+            return -1;
+        }
+        let bit = ((data[byte_idx] >> (7 - (off & 7))) & 1) as usize;
+        off += 1;
+
+        let child_idx = (state as usize) + bit;
+        if child_idx >= trie.len() {
+            return -1;
+        }
+        let entry = trie[child_idx];
+        if entry & 0x8000 != 0 {
+            // Leaf: symbol is in lower bits
+            return (entry & 0x7FFF) as i32;
+        }
+        state = entry;
+    }
 }
 
 pub fn decode_symbol(data: &[u8], bit_offset: usize, table: &HuffmanTable) -> i32 {
+    // Use branchless trie if available
+    if let Some(ref trie) = table.flat_trie {
+        return decode_symbol_trie(data, bit_offset, &trie.nodes);
+    }
+
+    // Fallback to tree-walk
     let mut code: u32 = 0;
     let mut bits_read: u8 = 0;
 
