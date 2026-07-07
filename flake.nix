@@ -32,6 +32,8 @@
             pkg-config
             libiconv
             python3Packages.psutil
+            ocl-icd
+            opencl-headers
           ];
 
           shellHook = ''

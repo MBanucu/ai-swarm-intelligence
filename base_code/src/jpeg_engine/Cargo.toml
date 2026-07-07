@@ -10,9 +10,9 @@ name = "jpeg_engine"
 
 [features]
 default = []
-gpu = []
+gpu = ["ocl"]
 cuda = []
-opencl = []
+opencl = ["ocl"]
 
 [dependencies]
 rand = "0.8"
