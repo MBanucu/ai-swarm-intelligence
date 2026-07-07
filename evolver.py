@@ -284,9 +284,13 @@ def _run_baseline():
         ["cargo", "run", "--release", "--features", "gpu", "--bin", "bench", "--", "5000", "/dev/stdout"],
         cwd=engine_dir, capture_output=True, text=True,
     )
+    if result.stdout:
+        print(result.stdout, end="", flush=True)
+    if result.stderr:
+        print(result.stderr, end="", flush=True)
     if result.returncode != 0:
         return None
-    for line in result.stdout.split("\n"):
+    for line in result.stdout.rsplit("\n"):
         if "Fitness" in line:
             try:
                 parts = line.split()
