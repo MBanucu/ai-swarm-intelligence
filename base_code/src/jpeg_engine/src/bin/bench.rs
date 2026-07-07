@@ -81,6 +81,37 @@ fn validate() {
         }
     }
     println!("Validation: all {} test cases passed.", test_cases.len());
+
+    // Validate batch processing at all benchmark sizes
+    for &batch_size in &[10, 200, 10000] {
+        let mut blocks: Vec<[f64; 64]> = (0..batch_size).map(|i| {
+            let mut b = [0.0f64; 64];
+            b[0] = (i as f64 - 0.5) * 64.0;
+            for j in 1..64 {
+                b[j] = ((i * j) as f64 % 128.0) - 64.0;
+            }
+            b
+        }).collect();
+
+        let expected: Vec<[f64; 64]> = blocks.iter().map(|b| reference_idct_2d(b)).collect();
+
+        let ptr = blocks.as_mut_ptr() as *mut f64;
+        idct_2d_batch(ptr, blocks.len() as u32);
+
+        for (k, (engine_block, ref_block)) in blocks.iter().zip(expected.iter()).enumerate() {
+            for j in 0..64 {
+                let diff = (engine_block[j] - ref_block[j]).abs();
+                if diff > epsilon {
+                    eprintln!(
+                        "BATCH VALIDATION FAILED: batch_size={} block={} coeff={}: engine={:.6} reference={:.6} diff={:.6}",
+                        batch_size, k, j, engine_block[j], ref_block[j], diff
+                    );
+                    std::process::exit(1);
+                }
+            }
+        }
+        println!("Validation: batch_size={} — all {} blocks passed.", batch_size, blocks.len());
+    }
 }
 
 fn create_blocks(count: usize) -> Vec<[f64; 64]> {
