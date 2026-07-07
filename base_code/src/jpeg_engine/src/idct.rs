@@ -5,7 +5,8 @@
 //   where C(0) = 1/√2, C(u≠0) = 1
 // ──────────────────────────────────────────────────────
 
-/// IDCT matrix stored row-major: IDCT1D[x][u]
+/// IDCT matrix stored row-major: IDCT1D[x][u].
+/// Constant data — lives in .rodata, fully visible to LLVM.
 const IDCT1D: [[f64; 8]; 8] = [
     [3.53553390593273730858e-01, 4.90392640201615215290e-01, 4.61939766255643369242e-01, 4.15734806151272617836e-01, 3.53553390593273786369e-01, 2.77785116509801144336e-01, 1.91341716182544918645e-01, 9.75451610080641656753e-02],
     [3.53553390593273730858e-01, 4.15734806151272617836e-01, 1.91341716182544918645e-01, -9.75451610080640962863e-02, -3.53553390593273730858e-01, -4.90392640201615215290e-01, -4.61939766255643424753e-01, -2.77785116509801088824e-01],
@@ -17,10 +18,7 @@ const IDCT1D: [[f64; 8]; 8] = [
     [3.53553390593273730858e-01, -4.90392640201615215290e-01, 4.61939766255643258219e-01, -4.15734806151272562325e-01, 3.53553390593273286768e-01, -2.77785116509800755757e-01, 1.91341716182544779867e-01, -9.75451610080642905753e-02],
 ];
 
-/// 1‑D IDCT — fully unrolled matrix-vector multiply.
-///
-/// All 8 matrix rows are captured to help the compiler's alias analysis
-/// and auto‑vectorisation (transparent to the caller).
+/// 1‑D IDCT — fully unrolled matrix-vector multiply, return by value.
 #[inline(always)]
 fn idct_1d(src: &[f64; 8]) -> [f64; 8] {
     let r0 = &IDCT1D[0]; let r1 = &IDCT1D[1]; let r2 = &IDCT1D[2]; let r3 = &IDCT1D[3];
@@ -45,39 +43,48 @@ fn idct_1d(src: &[f64; 8]) -> [f64; 8] {
 
 /// Inverse DCT — separable row‑column implementation.
 ///
-/// Both passes use the same 1‑D IDCT (matrix‑vector multiply).
-/// Row pass is unit‑stride; column pass uses strided gathers but
-/// the fully unrolled multiply‑accumulate tree hides the latency.
-/// Total: 2 × 8 × 64 = 1024 multiply‑adds per block.
+/// # Gen‑4 Mutation: Transposed temp buffer layout
+///
+/// The row pass writes its result to `tmp` in **transposed** order
+/// (i.e. `tmp[k*8 + y] = G[y][k]`).  This makes the column-pass
+/// reads unit‑stride — all 8 elements of a column live in
+/// `tmp[x*8 .. x*8+8]`, i.e. one or two contiguous 64‑B cache lines
+/// instead of 8 strided lines.
+///
+/// The column pass still writes to `block` in the standard row‑major
+/// layout (same as before).
 pub fn idct_2d(block: &mut [f64; 64]) {
     let mut tmp = [0.0f64; 64];
 
-    // ── Pass 1: IDCT on rows ──
-    let mut off = 0;
-    while off < 64 {
+    // ── Pass 1: IDCT on rows, store TRANSPOSED into tmp ──
+    // tmp[k*8 + y] = G[y][k] (column‑major temp)
+    for y in 0..8 {
         let row = [
-            block[off], block[off+1], block[off+2], block[off+3],
-            block[off+4], block[off+5], block[off+6], block[off+7],
+            block[y*8], block[y*8 + 1], block[y*8 + 2], block[y*8 + 3],
+            block[y*8 + 4], block[y*8 + 5], block[y*8 + 6], block[y*8 + 7],
         ];
         let d = idct_1d(&row);
-        tmp[off]     = d[0];
-        tmp[off+1]   = d[1];
-        tmp[off+2]   = d[2];
-        tmp[off+3]   = d[3];
-        tmp[off+4]   = d[4];
-        tmp[off+5]   = d[5];
-        tmp[off+6]   = d[6];
-        tmp[off+7]   = d[7];
-        off += 8;
+        // Transposed store: d[k] → tmp[k*8 + y]
+        tmp[y]       = d[0];
+        tmp[8 + y]   = d[1];
+        tmp[16 + y]  = d[2];
+        tmp[24 + y]  = d[3];
+        tmp[32 + y]  = d[4];
+        tmp[40 + y]  = d[5];
+        tmp[48 + y]  = d[6];
+        tmp[56 + y]  = d[7];
     }
 
-    // ── Pass 2: IDCT on columns ──
+    // ── Pass 2: IDCT on columns — unit‑stride reads from tmp ──
+    // tmp[x*8 + u] = G[u][x], so we read 8 consecutive f64s
     for x in 0..8 {
+        let off = x << 3;  // x * 8
         let col = [
-            tmp[x], tmp[8 + x], tmp[16 + x], tmp[24 + x],
-            tmp[32 + x], tmp[40 + x], tmp[48 + x], tmp[56 + x],
+            tmp[off], tmp[off+1], tmp[off+2], tmp[off+3],
+            tmp[off+4], tmp[off+5], tmp[off+6], tmp[off+7],
         ];
         let d = idct_1d(&col);
+        // Store to column x of block (standard row‑major output)
         block[x]      = d[0];
         block[8 + x]  = d[1];
         block[16 + x] = d[2];
@@ -89,21 +96,14 @@ pub fn idct_2d(block: &mut [f64; 64]) {
     }
 }
 
-/// Multi‑block batched IDCT — processes blocks via raw pointer
-/// to eliminate bounds checks.  For large batches this is ~10% faster
-/// than the iterator‑based loop.
+/// Multi‑block batched IDCT — processes blocks via raw pointer.
 pub fn batch_idct_2d(blocks: &mut [[f64; 64]]) {
     let n = blocks.len();
     if n == 0 {
         return;
     }
-    // Safety: `blocks` is a valid slice of `n` contiguous `[f64; 64]` arrays.
-    // Each array is exactly 64 f64s (512 B).  Iterating by raw pointer
-    // eliminates the bounds‑check that `iter_mut()` inserts per access
-    // (the slice‑iterator still checks `end != start` per element).
     let ptr = blocks.as_mut_ptr();
     for i in 0..n {
-        // SAFETY: i < n, ptr.add(i) is in the allocation.
         unsafe { idct_2d(&mut *ptr.add(i)); }
     }
 }
