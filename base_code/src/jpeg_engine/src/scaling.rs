@@ -113,6 +113,25 @@ pub fn bilinear_downsample(
     }
 }
 
+/// Batch‑process 8 YCbCr triples → 8 RGB triples.
+/// Accepts slices for ergonomic calling; caller must supply ≥8 elements.
+/// Specialised to keep constants in registers and help auto‑vectorisation.
+#[inline]
+pub fn ycbcr_to_rgb_8(
+    y: &[f64], cb: &[f64], cr: &[f64],
+) -> ([u8; 8], [u8; 8], [u8; 8]) {
+    let mut r = [0u8; 8];
+    let mut g = [0u8; 8];
+    let mut b = [0u8; 8];
+    for i in 0..8 {
+        let (ri, gi, bi) = ycbcr_to_rgb(y[i], cb[i], cr[i]);
+        r[i] = ri;
+        g[i] = gi;
+        b[i] = bi;
+    }
+    (r, g, b)
+}
+
 pub fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
     let r = r as f64;
     let g = g as f64;
