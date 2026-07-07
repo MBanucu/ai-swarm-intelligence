@@ -37,6 +37,7 @@ class ChildProcess:
         self.mutated_agent = os.path.join(
             self.dir, ".opencode", "agents", "dct-evolver.md"
         )
+        self.analysis_path = os.path.join(self.dir, "analysis.md")
 
     def setup(self):
         if os.path.exists(self.dir):
@@ -52,6 +53,9 @@ class ChildProcess:
 
     def run_lifecycle(self):
         self.setup()
+        print(f"[Attempt {self.attempt}] Analyzing past generations (core {self.core})...", flush=True)
+        print(f"    logs -> {self.dir}/analysis.log", flush=True)
+        self._analyze()
         print(f"[Attempt {self.attempt}] Creating mutation agent (core {self.core})...", flush=True)
         print(f"    logs -> {self.dir}/mutation.log", flush=True)
         if not self._breed():
@@ -65,10 +69,70 @@ class ChildProcess:
         print(f"[Attempt {self.attempt}] Running fitness benchmark (core {BENCH_CORE})...", flush=True)
         return self._benchmark()
 
+    def _analyze(self):
+        prompt = (
+            f"You are a strategy analyst for Generation {self.gen} of an"
+            f" evolutionary swarm optimizing a JPEG decoder engine.\n\n"
+            f"Your task: analyze all available data and produce recommendations"
+            f" for what mutation strategies to try and what to avoid.\n\n"
+            f"SOURCES TO ANALYZE:\n"
+            f"1) Benchmark history: '{BENCHMARK_HISTORY}' — performance trends"
+            f" across generations.\n"
+            f"2) Current codebase: '{BASE_CODE}' — the parent seed code.\n"
+            f"   Focus on src/jpeg_engine/src/ and Cargo.toml.\n"
+            f"3) Archived winner agents: '{ARCHIVE_DIR}' — strategies used by past winners.\n"
+            f"4) Parent agent template: '{self.parent_agent_path}' — the mutation baseline.\n"
+        )
+        if self.sibling_failures:
+            prompt += (
+                f"5) Sibling failures from current generation:\n"
+            )
+            for f in self.sibling_failures[-5:]:
+                prompt += f"   - Attempt {f['attempt']}: {f['reason']}\n"
+            if self.failure_dir:
+                prompt += f"   Full failure logs at: {self.failure_dir}/\n"
+
+        prompt += (
+            f"\n\nOUTPUT: Write a concise analysis to '{self.analysis_path}' with:\n"
+            f"## Performance Trends\n"
+            f"- Which optimizations produced the best gains historically\n"
+            f"- Where performance plateaued or regressed\n\n"
+            f"## Code Hotspots\n"
+            f"- Which functions/modules are the bottleneck candidates\n"
+            f"- Current code structure insights\n\n"
+            f"## Recommended Strategies (TRY THESE)\n"
+            f"- 3-5 specific optimization angles with concrete rationale\n"
+            f"- Mention specific files, functions, algorithms\n\n"
+            f"## Strategies to AVOID\n"
+            f"- Approaches that failed in past generations\n"
+            f"- Anti-patterns that caused test failures or regressions\n\n"
+            f"Output ONLY the raw markdown content for the analysis file."
+        )
+
+        cmd = [
+            "taskset", "-c", str(self.core),
+            "unbuffer", "opencode",
+            "--model", "opencode-go/deepseek-v4-flash",
+            "run", "--share", "--thinking", prompt,
+        ]
+        with open(os.path.join(self.dir, "analysis.log"), "w") as f:
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+        if result.returncode != 0 or not os.path.exists(self.analysis_path):
+            print(f"  [Attempt {self.attempt}] Analysis step failed — continuing without it",
+                  flush=True)
+            return
+        print(f"  [Attempt {self.attempt}] Analysis complete -> {self.analysis_path}",
+              flush=True)
+
     def _breed(self):
         prompt = (
-            f"Read the template at '{self.parent_agent_path}'"
-            f" and the benchmark history at '{BENCHMARK_HISTORY}' if it exists.\n"
+            f"Read the parent template at '{self.parent_agent_path}'.\n"
+            f"Read the strategy analysis at '{self.analysis_path}'.\n"
+            f"Read the benchmark history at '{BENCHMARK_HISTORY}' if it exists.\n\n"
+            f"CRITICAL: Follow the RECOMMENDED STRATEGIES from the analysis."
+            f" Avoid the strategies listed as AVOID."
+            f" The analysis studied performance trends and past failures"
+            f" to guide your mutation.\n\n"
             f"Output a UNIQUE mutated version of this OpenCode agent markdown file."
             f" Write it to '{self.mutated_agent}'.\n"
             f"Use a temperature between 0.3-0.8."
@@ -382,7 +446,7 @@ def main():
     for junk in (
         "fitness.score", "lifecycle.log", "mutation.log",
         "test_output.log", "death_test.log", "benchmark.log",
-        "fitness_history.json",
+        "fitness_history.json", "analysis.md", "analysis.log",
     ):
         jp = os.path.join(BASE_CODE, junk)
         if os.path.exists(jp):
