@@ -6,12 +6,15 @@ import shutil
 import subprocess
 import statistics
 
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
-POPULATION_SIZE = 2
 SPAWN_THRESHOLD = 60.0
 WORKER_CORES = [0, 1, 2]
 BENCH_CORE = 3
+MAX_RETRIES = 10
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 GEN_FILE = os.path.join(ROOT_DIR, "logs", "current_gen.txt")
@@ -22,10 +25,10 @@ BENCHMARK_HISTORY = os.path.join(ROOT_DIR, "logs", "benchmark_history.md")
 
 
 class ChildProcess:
-    def __init__(self, index, gen, gen_dir, worker_core, parent_agent_path):
-        self.index = index
+    def __init__(self, attempt, gen, gen_dir, worker_core, parent_agent_path):
+        self.attempt = attempt
         self.gen = gen
-        self.dir = os.path.join(gen_dir, f"child_{index}")
+        self.dir = os.path.join(gen_dir, f"child_{attempt}")
         self.core = worker_core
         self.parent_agent_path = parent_agent_path
         self.score = 999.9
@@ -47,14 +50,18 @@ class ChildProcess:
 
     def run_lifecycle(self):
         self.setup()
-        print(f"[Child {self.index}] Creating mutation agent (core {self.core})...", flush=True)
+        print(f"[Attempt {self.attempt}] Creating mutation agent (core {self.core})...", flush=True)
         print(f"    logs -> {self.dir}/mutation.log", flush=True)
-        self._breed()
-        print(f"[Child {self.index}] Spawning child lifecycle (core {self.core})...", flush=True)
+        if not self._breed():
+            print(f"  [Attempt {self.attempt}] Mutation failed", flush=True)
+            return False
+        print(f"[Attempt {self.attempt}] Spawning child lifecycle (core {self.core})...", flush=True)
         print(f"    logs -> {self.dir}/lifecycle.log", flush=True)
-        self._optimize()
-        print(f"[Child {self.index}] Running fitness benchmark (core {BENCH_CORE})...", flush=True)
-        self._benchmark()
+        if not self._optimize():
+            print(f"  [Attempt {self.attempt}] Lifecycle failed", flush=True)
+            return False
+        print(f"[Attempt {self.attempt}] Running fitness benchmark (core {BENCH_CORE})...", flush=True)
+        return self._benchmark()
 
     def _breed(self):
         prompt = (
@@ -65,7 +72,7 @@ class ChildProcess:
             f"Use a temperature between 0.3-0.8."
             f" Tweak the frontmatter parameters (temperature, maxSteps 20-60).\n"
             f"Rephrase optimization strategies differently from the parent"
-            f" — try a DIFFERENT algorithmic angle than siblings.\n\n"
+            f" — try a DIFFERENT algorithmic angle.\n\n"
             f"FREEDOM OF LANGUAGE:\n"
             f"You are explicitly allowed to move away from pure Python."
             f" You can choose to implement the core IDCT math in Python, C, or Rust.\n\n"
@@ -99,11 +106,16 @@ class ChildProcess:
             "run", "--thinking", prompt,
         ]
         with open(os.path.join(self.dir, "mutation.log"), "w") as f:
-            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+        if result.returncode != 0:
+            return False
+        if not os.path.exists(self.mutated_agent):
+            return False
+        return True
 
     def _optimize(self):
         prompt = (
-            f"You are Child {self.index} of Generation {self.gen}"
+            f"You are Child {self.attempt} of Generation {self.gen}"
             f" in an evolutionary swarm.\n"
             f"Your task:\n"
             f"1) Read '{os.path.join(self.dir, 'src', 'dct_engine.py')}',"
@@ -134,7 +146,8 @@ class ChildProcess:
             "run", "--thinking", prompt,
         ]
         with open(os.path.join(self.dir, "lifecycle.log"), "w") as f:
-            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+        return result.returncode == 0
 
     def _benchmark(self):
         test_result = subprocess.run(
@@ -148,11 +161,11 @@ class ChildProcess:
                 f.write("\n" + test_result.stderr)
 
         if test_result.returncode != 0:
-            print(f"  [Child {self.index}] DIED — Tests failed")
+            print(f"  [Attempt {self.attempt}] DIED — Tests failed")
             with open(os.path.join(self.dir, "fitness.score"), "w") as f:
                 f.write("999.9")
             shutil.copy2(test_log, os.path.join(self.dir, "death_test.log"))
-            return
+            return False
 
         bench_script = (
             f"import time, statistics, sys, os, ctypes\n"
@@ -194,21 +207,14 @@ class ChildProcess:
                 score = float(f.read().strip())
         except (FileNotFoundError, ValueError):
             score = 999.0
-        print(f"  [Child {self.index}] SURVIVED — Score: {score:.6f}ms/iter")
+        print(f"  [Attempt {self.attempt}] SURVIVED — Score: {score:.6f}ms/iter")
         self.score = score
-
-    def get_score(self):
-        score_file = os.path.join(self.dir, "fitness.score")
-        if os.path.exists(score_file):
-            try:
-                with open(score_file) as f:
-                    return float(f.read().strip())
-            except ValueError:
-                return 999.9
-        return 999.9
-
+        return True
 
 def wait_for_cpu(headroom):
+    if psutil is None:
+        time.sleep(2)
+        return
     psutil.cpu_percent(interval=None)
     while True:
         load = psutil.cpu_percent(interval=2.0)
@@ -238,54 +244,48 @@ def main():
     )
 
     print("=" * 80)
-    print(
-        f"  EVOLUTIONARY SWARM — Generation {gen}"
-        f" (Population: {POPULATION_SIZE})"
-    )
-    print(
-        f"  Worker cores: {WORKER_CORES} | Benchmark core: {BENCH_CORE}"
-    )
+    print(f"  EVOLUTIONARY SWARM — Generation {gen}")
+    print(f"  Worker cores: {WORKER_CORES} | Benchmark core: {BENCH_CORE}")
     print("=" * 80)
     print()
 
-    children = []
-    for i in range(1, POPULATION_SIZE + 1):
-        core = WORKER_CORES[(i - 1) % len(WORKER_CORES)]
-        children.append(ChildProcess(i, gen, gen_dir, core, parent_agent))
+    best_score = 999.9
+    winner_dir = None
+    winner_attempt = 0
 
-    for child in children:
-        print(f"\n=== Spawning Child {child.index}/{POPULATION_SIZE} on core {child.core} ===", flush=True)
+    for attempt in range(1, MAX_RETRIES + 1):
+        print()
+        print("=" * 70)
+        print(f"  Generation {gen} — Attempt {attempt} of {MAX_RETRIES}")
+        print("=" * 70)
+
+        core = WORKER_CORES[(attempt - 1) % len(WORKER_CORES)]
+        child = ChildProcess(attempt, gen, gen_dir, core, parent_agent)
+
+        print(f"\n--- Attempt {attempt} on core {core} ---", flush=True)
         print(f"    dir: {child.dir}", flush=True)
         wait_for_cpu(SPAWN_THRESHOLD)
-        child.run_lifecycle()
 
-    print()
-    print("--- Natural Selection ---")
+        if child.run_lifecycle():
+            best_score = child.score
+            winner_dir = child.dir
+            winner_attempt = attempt
+            print()
+            print(f">>> SURVIVOR FOUND on attempt {attempt}: {best_score:.6f}ms/iter")
+            break
 
-    best_score = 999.9
-    winner_index = 0
-
-    for child in children:
-        child_score = child.get_score()
-        if child_score < 999.0:
-            print(f"  Child {child.index}: {child_score:.6f} ms/iter")
-        else:
-            print(f"  Child {child.index}: NO SCORE (dead)")
-
-        if child_score < best_score:
-            best_score = child_score
-            winner_index = child.index
-
-    if winner_index == 0 or best_score >= 999.0:
         print()
-        print(f"EXTINCTION: No viable survivor in Generation {gen}.")
+        print(f"EXTINCTION on attempt {attempt}: No viable survivor.")
+        print("Breeding fresh child...")
+
+    if winner_dir is None:
+        print()
+        print(f"FINAL EXTINCTION: All {MAX_RETRIES} attempts failed for Generation {gen}.")
         print("Re-running generation...")
         sys.exit(1)
 
-    winner_dir = os.path.join(gen_dir, f"child_{winner_index}")
-
     print()
-    print(f">>> WINNER: Child {winner_index} — {best_score:.6f}ms/iter")
+    print(f">>> WINNER: Attempt {winner_attempt} — {best_score:.6f}ms/iter")
     print()
 
     if os.path.exists(BASE_CODE):
@@ -319,7 +319,7 @@ def main():
     with open(BENCHMARK_HISTORY, "a") as f:
         ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
         f.write(
-            f"| Gen {gen} | Child {winner_index}"
+            f"| Gen {gen} | Attempt {winner_attempt}"
             f" | {best_score:.6f}ms | {ts} |\n"
         )
 
@@ -335,7 +335,7 @@ def main():
         subprocess.run(
             [
                 "git", "-C", ROOT_DIR, "commit", "-m",
-                f"evolution(gen-{gen}): winner child-{winner_index}"
+                f"evolution(gen-{gen}): winner attempt-{winner_attempt}"
                 f" at {best_score:.6f}ms/iter",
             ],
             check=False,
@@ -361,7 +361,7 @@ def main():
                     "--title",
                     f"Evolution Gen {gen} Winner — {best_score:.6f}ms/iter",
                     "--body",
-                    f"Child {winner_index} won Generation {gen}"
+                    f"Attempt {winner_attempt} won Generation {gen}"
                     f" with {best_score:.6f}ms/iter.",
                     "--base", "main",
                 ],

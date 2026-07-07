@@ -1,14 +1,26 @@
 # AI Swarm Intelligence
 
-Parallel evolutionary optimization of a DCT engine using OpenCode agents that mutate, compete, and reproduce.
+Sequential evolutionary optimization of a DCT engine using OpenCode agents that mutate, compete, and reproduce.
 
 ## Quick start
 
 ```bash
-bash evolver.sh
+nix develop --command python3 evolver.py
 ```
 
-Runs one generation: mutates agent genomes, spawns parallel child sandboxes, evaluates fitness, selects winner, commits to git, and opens a GitHub PR.
+Runs one generation: mutates an agent genome, spawns a child sandbox, evaluates fitness. If the child survives (tests pass), it becomes the winner. If it dies, a fresh child is bred and retried — up to 10 attempts per generation. Winner is committed to git and opens a GitHub PR.
+
+## Nix environment
+
+The `flake.nix` provides a reproducible shell with all dependencies:
+
+```bash
+nix develop
+```
+
+Includes: `python3`, `git`, `gh`, `bc`, `opencode`, `unbuffer` (expect), `util-linux` (taskset), `rustc`, `cargo`, `gcc`, `psutil`, and more.
+
+If running without `nix develop`, the evolver degrades gracefully — `psutil` is optional and its absence only skips CPU headroom throttling.
 
 ## Architecture
 
@@ -32,7 +44,7 @@ logs/
 
 | Command | Purpose |
 |---|---|
-| `bash evolver.sh` | Run one evolutionary generation |
+| `nix develop --command python3 evolver.py` | Run one evolutionary generation |
 | `python3 -m unittest tests.test_dct_engine -v` | Run fitness tests (uses built-in unittest, not pytest) |
 | `python3 -m unittest discover -s base_code/ -p 'test_*.py' -v` | Run tests against base_code copy |
 
@@ -50,21 +62,16 @@ logs/
 
 ```
 base_template.md ──mutate──▶ child_1/.opencode/agents/dct-evolver.md
-                   ├─mutate─▶ child_2/.opencode/agents/dct-evolver.md
-                   │                   │
-                   │          [winner selected]
-                   │                   │
-                   └──────────────────▶ logs/archived_agents/gen_N_winner.md
-                                              │
-                                    parent for Gen N+1
+                   │                         │
+                   │           [dies, retry] │ [survives = winner]
+                   │                         │
+                   ├─────────────────▶ child_2/.opencode/...  (dies)
+                   │                            │
+                   ├─────────────────▶ child_N/.opencode/...  (survives!)
+                   ▼                            │
+          logs/archived_agents/gen_N_winner.md ◀┘
+                         │
+               parent for Gen N+1
 ```
 
 The root `.opencode/agents/dct-evolver.md` was removed — it's dead configuration. The active genomes are per-child and per-archive.
-
-## Nix environment (optional)
-
-```bash
-nix develop
-```
-
-Provides `python3`, `git`, `gh`, `bc`, `opencode`, `util-linux` (for `taskset`) in a reproducible shell. Not required to run the evolver if these are already on `$PATH`.
