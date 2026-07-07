@@ -3,10 +3,10 @@
 /// CPU fallback always available.
 
 pub trait GpuKernel: Send + Sync {
-    fn batch_idct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError>;
-    fn batch_dct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError>;
+    fn batch_idct_2d(&self, blocks: &mut [[f32; 64]]) -> Result<(), GpuError>;
+    fn batch_dct_2d(&self, blocks: &mut [[f32; 64]]) -> Result<(), GpuError>;
     fn batch_ycbcr_to_rgb(
-        &self, y: &[f64], cb: &[f64], cr: &[f64],
+        &self, y: &[f32], cb: &[f32], cr: &[f32],
         r: &mut [u8], g: &mut [u8], b: &mut [u8],
     ) -> Result<(), GpuError>;
     fn device_name(&self) -> &str;
@@ -36,7 +36,7 @@ pub struct CpuKernel;
 impl GpuKernel for CpuKernel {
     /// Batch IDCT — uses slice chunking for better cache locality
     /// and less pointer-chasing overhead vs individual block processing.
-    fn batch_idct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError> {
+    fn batch_idct_2d(&self, blocks: &mut [[f32; 64]]) -> Result<(), GpuError> {
         let len = blocks.len();
         if len == 0 {
             return Ok(());
@@ -61,7 +61,7 @@ impl GpuKernel for CpuKernel {
         Ok(())
     }
 
-    fn batch_dct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError> {
+    fn batch_dct_2d(&self, blocks: &mut [[f32; 64]]) -> Result<(), GpuError> {
         let len = blocks.len();
         if len == 0 {
             return Ok(());
@@ -86,7 +86,7 @@ impl GpuKernel for CpuKernel {
     }
 
     fn batch_ycbcr_to_rgb(
-        &self, y: &[f64], cb: &[f64], cr: &[f64],
+        &self, y: &[f32], cb: &[f32], cr: &[f32],
         r: &mut [u8], g: &mut [u8], b: &mut [u8],
     ) -> Result<(), GpuError> {
         let n = y.len();
@@ -133,15 +133,14 @@ pub fn gpu_available() -> bool {
 pub fn create_kernel() -> Box<dyn GpuKernel> {
     #[cfg(feature = "opencl")]
     {
-        if let Ok(k) = opencl_backend::OpenClKernel::new() {
-            if k.calibrate() {
+        match opencl_backend::OpenClKernel::new() {
+            Ok(k) => {
                 eprintln!("[jpeg_engine] Using GPU: {}", k.device_name());
                 return Box::new(k);
-            } else {
-                eprintln!("[jpeg_engine] GPU too slow ({}), falling back to CPU", k.device_name());
             }
-        } else {
-            eprintln!("[jpeg_engine] GPU unavailable, falling back to CPU");
+            Err(e) => {
+                eprintln!("[jpeg_engine] GPU unavailable ({}), falling back to CPU", e);
+            }
         }
     }
     Box::new(CpuKernel)
@@ -160,7 +159,7 @@ mod opencl_backend {
     const IDCT_KERNEL_SRC: &str = r#"
     // Pre-computed IDCT1D_SCALED matrix (0.5 * C(u) * cos((2x+1)uπ/16))
     // Transposed: mat[k] = IDCT1D_SCALED[x][u] where x = k/8, u = k%8
-    __constant double IDCT_MAT[64] = {
+    __constant float IDCT_MAT[64] = {
         0.35355339, 0.49039264, 0.46193977, 0.41573481,
         0.35355339, 0.27778512, 0.19134172, 0.09754516,
         0.35355339, 0.41573481, 0.19134172,-0.09754516,
@@ -180,9 +179,9 @@ mod opencl_backend {
     };
 
     // 1-D IDCT helper (fully unrolled, scale-fused)
-    inline void idct_1d(__constant double* mat, double* row, double* dst) {
-        double s0 = row[0], s1 = row[1], s2 = row[2], s3 = row[3];
-        double s4 = row[4], s5 = row[5], s6 = row[6], s7 = row[7];
+    inline void idct_1d(__constant float* mat, float* row, float* dst) {
+        float s0 = row[0], s1 = row[1], s2 = row[2], s3 = row[3];
+        float s4 = row[4], s5 = row[5], s6 = row[6], s7 = row[7];
         dst[0] = s0*mat[0]  + s1*mat[1]  + s2*mat[2]  + s3*mat[3]
                + s4*mat[4]  + s5*mat[5]  + s6*mat[6]  + s7*mat[7];
         dst[1] = s0*mat[8]  + s1*mat[9]  + s2*mat[10] + s3*mat[11]
@@ -201,19 +200,19 @@ mod opencl_backend {
                + s4*mat[60] + s5*mat[61] + s6*mat[62] + s7*mat[63];
     }
 
-    __kernel void batch_idct(__global double* blocks, int num_blocks) {
+    __kernel void batch_idct(__global float* blocks, int num_blocks) {
         int gid = get_global_id(0);
         if (gid >= num_blocks) return;
 
-        __global double* block = blocks + gid * 64;
+        __global float* block = blocks + gid * 64;
 
         // Private (per-work-item) memory — each work item processes one block independently
-        double tmp[64];
+        float tmp[64];
 
         // Pass 1: IDCT on rows
         for (int y = 0; y < 8; y++) {
             int off = y * 8;
-            double row[8];
+            float row[8];
             row[0] = block[off];   row[1] = block[off+1];
             row[2] = block[off+2]; row[3] = block[off+3];
             row[4] = block[off+4]; row[5] = block[off+5];
@@ -223,12 +222,12 @@ mod opencl_backend {
 
         // Pass 2: IDCT on columns (strided reads)
         for (int x = 0; x < 8; x++) {
-            double col[8];
+            float col[8];
             col[0] = tmp[x];      col[1] = tmp[8+x];
             col[2] = tmp[16+x];   col[3] = tmp[24+x];
             col[4] = tmp[32+x];   col[5] = tmp[40+x];
             col[6] = tmp[48+x];   col[7] = tmp[56+x];
-            double d[8];
+            float d[8];
             idct_1d(IDCT_MAT, col, d);
             block[x]     = d[0];  block[8+x]   = d[1];
             block[16+x]  = d[2];  block[24+x]  = d[3];
@@ -237,11 +236,11 @@ mod opencl_backend {
         }
     }
 
-    __kernel void batch_fdct(__global double* blocks, int num_blocks) {
+    __kernel void batch_fdct(__global float* blocks, int num_blocks) {
         int gid = get_global_id(0);
         if (gid >= num_blocks) return;
         // For now, just zero them (placeholder — real DCT kernel would go here)
-        __global double* block = blocks + gid * 64;
+        __global float* block = blocks + gid * 64;
         block[0] = 0.0;
     }
     "#;
@@ -276,48 +275,17 @@ mod opencl_backend {
                 .program(&pro_que.program())
                 .name("batch_idct")
                 .queue(pro_que.queue().clone())
-                .arg(None::<&ocl::Buffer<f64>>)
+                .arg(None::<&ocl::Buffer<f32>>)
                 .arg(&0i32)
                 .build()
                 .map_err(|e| GpuError::KernelError(format!("kernel build: {e}")))?;
 
             Ok(OpenClKernel { pro_que, idct_kernel, device: device_name })
         }
-
-        /// Calibrate: measure GPU vs CPU throughput for a realistic batch.
-        /// Returns `true` if the GPU is meaningfully faster (≥2× the CPU).
-        /// The calibration runs once at init, adding ~1–2 ms to startup.
-        pub fn calibrate(&self) -> bool {
-            // 1000 blocks — enough to measure without dominating init time
-            let test_size = 1000;
-            let mut gpu_blocks: Vec<[f64; 64]> = (0..test_size)
-                .map(|i| {
-                    let mut b = [0.0f64; 64];
-                    b[0] = (i as f64 % 256.0) * 8.0;
-                    b
-                })
-                .collect();
-
-            // Measure GPU time (warm + timed run)
-            let start = std::time::Instant::now();
-            if self.batch_idct_2d(&mut gpu_blocks).is_err() {
-                return false;
-            }
-            let gpu_elapsed = start.elapsed().as_secs_f64();
-
-            // Measure CPU time (warm + timed run)
-            let cpu = CpuKernel;
-            let start = std::time::Instant::now();
-            let _ = cpu.batch_idct_2d(&mut gpu_blocks);
-            let cpu_elapsed = start.elapsed().as_secs_f64();
-
-            // GPU must be ≥2× faster to justify buffer transfer overhead
-            gpu_elapsed < cpu_elapsed * 0.5
-        }
     }
 
     impl GpuKernel for OpenClKernel {
-        fn batch_idct_2d(&self, blocks: &mut [[f64; 64]]) -> Result<(), GpuError> {
+        fn batch_idct_2d(&self, blocks: &mut [[f32; 64]]) -> Result<(), GpuError> {
             let n = blocks.len();
             if n == 0 { return Ok(()); }
 
@@ -327,7 +295,7 @@ mod opencl_backend {
                 .len(n * 64)
                 .copy_host_slice(unsafe {
                     std::slice::from_raw_parts(
-                        blocks.as_ptr() as *const f64,
+                        blocks.as_ptr() as *const f32,
                         n * 64,
                     )
                 })
@@ -343,7 +311,7 @@ mod opencl_backend {
 
             unsafe {
                 // Use local_work_size(64) to balance parallelism vs register pressure.
-                // On Intel iGPUs, large private arrays (64 f64 = 512 B per work item)
+                // On Intel iGPUs, large private arrays (64 f32 = 512 B per work item)
                 // can cause register spilling with large workgroups; 64 items per
                 // workgroup keeps pressure manageable while still exploiting the GPU's
                 // SIMD units.
@@ -357,7 +325,7 @@ mod opencl_backend {
 
             buf.read(unsafe {
                 std::slice::from_raw_parts_mut(
-                    blocks.as_mut_ptr() as *mut f64,
+                    blocks.as_mut_ptr() as *mut f32,
                     n * 64,
                 )
             }).enq().map_err(|e| GpuError::KernelError(format!("readback: {e}")))?;
@@ -365,12 +333,12 @@ mod opencl_backend {
             Ok(())
         }
 
-        fn batch_dct_2d(&self, _blocks: &mut [[f64; 64]]) -> Result<(), GpuError> {
+        fn batch_dct_2d(&self, _blocks: &mut [[f32; 64]]) -> Result<(), GpuError> {
             Err(GpuError::NotAvailable)
         }
 
         fn batch_ycbcr_to_rgb(
-            &self, _y: &[f64], _cb: &[f64], _cr: &[f64],
+            &self, _y: &[f32], _cb: &[f32], _cr: &[f32],
             _r: &mut [u8], _g: &mut [u8], _b: &mut [u8],
         ) -> Result<(), GpuError> {
             Err(GpuError::NotAvailable)
@@ -397,7 +365,7 @@ mod tests {
     #[test]
     fn test_cpu_kernel_batch_idct() {
         let kernel = CpuKernel;
-        let mut blocks = vec![[0.0f64; 64]; 10];
+        let mut blocks = vec![[0.0f32; 64]; 10];
         blocks[0][0] = 8.0;
         kernel.batch_idct_2d(&mut blocks).unwrap();
         assert!((blocks[0][0] - 1.0).abs() < 0.001);

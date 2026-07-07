@@ -53,9 +53,9 @@ fn test_image_dimensions_match() {
 #[test]
 fn test_dct_idct_roundtrip_multiple() {
     for i in 0..10 {
-        let mut block = [0.0f64; 64];
+        let mut block = [0.0f32; 64];
         for j in 0..64 {
-            block[j] = (i as f64 * j as f64 % 256.0) - 128.0;
+            block[j] = (i as f32 * j as f32 % 256.0) - 128.0;
         }
         let orig = block;
         dct_2d(block.as_mut_ptr());
@@ -87,10 +87,10 @@ fn test_ycbcr_clamping() {
 
 #[test]
 fn test_idct_performance() {
-    let mut blocks: Vec<[f64; 64]> = (0..100).map(|i| {
-        let mut b = [0.0f64; 64];
+    let mut blocks: Vec<[f32; 64]> = (0..100).map(|i| {
+        let mut b = [0.0f32; 64];
         for j in 0..64 {
-            b[j] = (i as f64 * j as f64 % 256.0) - 128.0;
+            b[j] = (i as f32 * j as f32 % 256.0) - 128.0;
         }
         b
     }).collect();
@@ -101,8 +101,8 @@ fn test_idct_performance() {
             idct_2d(block.as_mut_ptr());
         }
     }
-    let elapsed = start.elapsed().as_secs_f64();
-    let total_iters = 1000.0 * blocks.len() as f64;
+    let elapsed = start.elapsed().as_secs_f32();
+    let total_iters = 1000.0 * blocks.len() as f32;
     let ms_per_iter = (elapsed / total_iters) * 1000.0;
     println!("IDCT performance: {:.6} ms/iter ({} blocks x 1000 loops)", ms_per_iter, blocks.len());
     assert!(ms_per_iter < 0.1, "IDCT too slow: {:.6}ms/iter", ms_per_iter);

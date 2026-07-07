@@ -1,12 +1,12 @@
 /// Pre‑computed YCbCr→RGB coefficients (compile‑time constants)
-const KR: f64 = 1.402;
-const KG1: f64 = 0.344136;
-const KG2: f64 = 0.714136;
-const KB: f64 = 1.772;
+const KR: f32 = 1.402;
+const KG1: f32 = 0.344136;
+const KG2: f32 = 0.714136;
+const KB: f32 = 1.772;
 
 /// Fast clamp helper — avoids `round()` function call overhead.
 #[inline(always)]
-fn clamp_u8(v: f64) -> u8 {
+fn clamp_u8(v: f32) -> u8 {
     // Using `+ 0.5` + `as u8` truncation gives rounding,
     // and the branchless max/min avoids expensive `round()` calls.
     let v = v + 0.5;
@@ -20,7 +20,7 @@ fn clamp_u8(v: f64) -> u8 {
 /// Uses fused‑multiply‑add pattern: compiler auto‑vectorises
 /// this into `vfmadd` / `vfmsub` across scanlines.
 /// Replaced `round()` call with inline `+ 0.5` truncation for ~2× faster clamp.
-pub fn ycbcr_to_rgb(y: f64, cb: f64, cr: f64) -> (u8, u8, u8) {
+pub fn ycbcr_to_rgb(y: f32, cb: f32, cr: f32) -> (u8, u8, u8) {
     let cb_off = cb - 128.0;
     let cr_off = cr - 128.0;
 
@@ -38,13 +38,13 @@ pub fn bilinear_upsample(
     if src_w == 0 || src_h == 0 || dst_w == 0 || dst_h == 0 {
         return;
     }
-    let x_ratio = if dst_w > 1 { (src_w - 1) as f64 / (dst_w - 1) as f64 } else { 0.0 };
-    let y_ratio = if dst_h > 1 { (src_h - 1) as f64 / (dst_h - 1) as f64 } else { 0.0 };
+    let x_ratio = if dst_w > 1 { (src_w - 1) as f32 / (dst_w - 1) as f32 } else { 0.0 };
+    let y_ratio = if dst_h > 1 { (src_h - 1) as f32 / (dst_h - 1) as f32 } else { 0.0 };
 
     // Precompute source row offsets and fractions
     let src_rows: Vec<usize> = (0..dst_h)
         .map(|y| {
-            let sy = y as f64 * y_ratio;
+            let sy = y as f32 * y_ratio;
             let sy_int = sy as usize;
             sy_int * src_w
         })
@@ -52,38 +52,38 @@ pub fn bilinear_upsample(
 
     let src_rows2: Vec<usize> = (0..dst_h)
         .map(|y| {
-            let sy = y as f64 * y_ratio;
+            let sy = y as f32 * y_ratio;
             let sy_int = sy as usize;
             ((sy_int + 1).min(src_h - 1)) * src_w
         })
         .collect();
 
-    let sy_fracs: Vec<f64> = (0..dst_h)
+    let sy_fracs: Vec<f32> = (0..dst_h)
         .map(|y| {
-            let sy = y as f64 * y_ratio;
-            sy - (sy as usize) as f64
+            let sy = y as f32 * y_ratio;
+            sy - (sy as usize) as f32
         })
         .collect();
 
     // Precompute all x positions and fractions
     let x_positions: Vec<usize> = (0..dst_w)
         .map(|x| {
-            let sx = x as f64 * x_ratio;
+            let sx = x as f32 * x_ratio;
             sx as usize
         })
         .collect();
 
     let x_positions2: Vec<usize> = (0..dst_w)
         .map(|x| {
-            let sx = x as f64 * x_ratio;
+            let sx = x as f32 * x_ratio;
             (sx as usize + 1).min(src_w - 1)
         })
         .collect();
 
-    let x_fracs: Vec<f64> = (0..dst_w)
+    let x_fracs: Vec<f32> = (0..dst_w)
         .map(|x| {
-            let sx = x as f64 * x_ratio;
-            sx - (sx as usize) as f64
+            let sx = x as f32 * x_ratio;
+            sx - (sx as usize) as f32
         })
         .collect();
 
@@ -99,10 +99,10 @@ pub fn bilinear_upsample(
             let sx2 = x_positions2[x];
             let sx_frac = x_fracs[x];
 
-            let a = src[row_off + sx_int] as f64;
-            let b = src[row_off + sx2] as f64;
-            let c = src[row_off2 + sx_int] as f64;
-            let d = src[row_off2 + sx2] as f64;
+            let a = src[row_off + sx_int] as f32;
+            let b = src[row_off + sx2] as f32;
+            let c = src[row_off2 + sx_int] as f32;
+            let d = src[row_off2 + sx2] as f32;
 
             let inv_sx = 1.0 - sx_frac;
             let top = a * inv_sx + b * sx_frac;
@@ -121,15 +121,15 @@ pub fn bilinear_downsample(
     if src_w == 0 || src_h == 0 || dst_w == 0 || dst_h == 0 {
         return;
     }
-    let x_ratio = src_w as f64 / dst_w as f64;
-    let y_ratio = src_h as f64 / dst_h as f64;
+    let x_ratio = src_w as f32 / dst_w as f32;
+    let y_ratio = src_h as f32 / dst_h as f32;
 
     // Precompute source row indices
     for y in 0..dst_h {
-        let sy = ((y as f64 * y_ratio) as usize) * src_w;
+        let sy = ((y as f32 * y_ratio) as usize) * src_w;
         let dst_row = y * dst_w;
         for x in 0..dst_w {
-            let sx = (x as f64 * x_ratio) as usize;
+            let sx = (x as f32 * x_ratio) as usize;
             dst[dst_row + x] = src[sy + sx];
         }
     }
@@ -140,7 +140,7 @@ pub fn bilinear_downsample(
 /// Specialised to keep constants in registers and help auto‑vectorisation.
 #[inline]
 pub fn ycbcr_to_rgb_8(
-    y: &[f64], cb: &[f64], cr: &[f64],
+    y: &[f32], cb: &[f32], cr: &[f32],
 ) -> ([u8; 8], [u8; 8], [u8; 8]) {
     let mut r = [0u8; 8];
     let mut g = [0u8; 8];
@@ -154,10 +154,10 @@ pub fn ycbcr_to_rgb_8(
     (r, g, b)
 }
 
-pub fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
-    let r = r as f64;
-    let g = g as f64;
-    let b = b as f64;
+pub fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
+    let r = r as f32;
+    let g = g as f32;
+    let b = b as f32;
     let y  =  0.299 * r + 0.587 * g + 0.114 * b;
     let cb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b;
     let cr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b;
@@ -165,10 +165,10 @@ pub fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
 }
 
 /// Convert 8x8 pixel block to YCbCr component planes
-pub fn block_to_ycbcr(pixels: &[(u8, u8, u8); 64]) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-    let mut y_block = vec![0.0f64; 64];
-    let mut cb_block = vec![0.0f64; 64];
-    let mut cr_block = vec![0.0f64; 64];
+pub fn block_to_ycbcr(pixels: &[(u8, u8, u8); 64]) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let mut y_block = vec![0.0f32; 64];
+    let mut cb_block = vec![0.0f32; 64];
+    let mut cr_block = vec![0.0f32; 64];
 
     for i in 0..64 {
         let (y, cb, cr) = rgb_to_ycbcr(pixels[i].0, pixels[i].1, pixels[i].2);
