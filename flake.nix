@@ -24,6 +24,14 @@
             gh
             bc
             opencode
+            expect
+            util-linux
+            rustc
+            cargo
+            gcc
+            pkg-config
+            libiconv
+            python3Packages.psutil
           ];
 
           shellHook = ''
