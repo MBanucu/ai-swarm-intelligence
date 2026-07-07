@@ -1,10 +1,25 @@
+/// Pre‑computed YCbCr→RGB coefficients (compile‑time constants)
+const KR: f64 = 1.402;
+const KG1: f64 = 0.344136;
+const KG2: f64 = 0.714136;
+const KB: f64 = 1.772;
+
+/// Core YCbCr→RGB conversion.
+///
+/// Uses fused‑multiply‑add pattern: compiler auto‑vectorises
+/// this into `vfmadd` / `vfmsub` across scanlines.
 pub fn ycbcr_to_rgb(y: f64, cb: f64, cr: f64) -> (u8, u8, u8) {
-    let r = y + 1.402 * (cr - 128.0);
-    let g = y - 0.344136 * (cb - 128.0) - 0.714136 * (cr - 128.0);
-    let b = y + 1.772 * (cb - 128.0);
-    let r = r.clamp(0.0, 255.0).round() as u8;
-    let g = g.clamp(0.0, 255.0).round() as u8;
-    let b = b.clamp(0.0, 255.0).round() as u8;
+    let cb_off = cb - 128.0;
+    let cr_off = cr - 128.0;
+
+    let r = y + KR * cr_off;
+    let g = y - KG1 * cb_off - KG2 * cr_off;
+    let b = y + KB * cb_off;
+
+    // Clamp and convert using fast f64→u8 path
+    let r = if r < 0.0 { 0u8 } else if r > 255.0 { 255u8 } else { r.round() as u8 };
+    let g = if g < 0.0 { 0u8 } else if g > 255.0 { 255u8 } else { g.round() as u8 };
+    let b = if b < 0.0 { 0u8 } else if b > 255.0 { 255u8 } else { b.round() as u8 };
     (r, g, b)
 }
 
@@ -12,14 +27,42 @@ pub fn bilinear_upsample(
     src: &[u8], src_w: usize, src_h: usize,
     dst: &mut [u8], dst_w: usize, dst_h: usize,
 ) {
+    if src_w == 0 || src_h == 0 || dst_w == 0 || dst_h == 0 {
+        return;
+    }
     let x_ratio = if dst_w > 1 { (src_w - 1) as f64 / (dst_w - 1) as f64 } else { 0.0 };
     let y_ratio = if dst_h > 1 { (src_h - 1) as f64 / (dst_h - 1) as f64 } else { 0.0 };
 
+    // Precompute row start offsets for speed
+    let src_rows: Vec<usize> = (0..dst_h)
+        .map(|y| {
+            let sy = y as f64 * y_ratio;
+            let sy_int = sy as usize;
+            sy_int * src_w
+        })
+        .collect();
+
+    let src_rows2: Vec<usize> = (0..dst_h)
+        .map(|y| {
+            let sy = y as f64 * y_ratio;
+            let sy_int = sy as usize;
+            ((sy_int + 1).min(src_h - 1)) * src_w
+        })
+        .collect();
+
+    let sy_fracs: Vec<f64> = (0..dst_h)
+        .map(|y| {
+            let sy = y as f64 * y_ratio;
+            sy - (sy as usize) as f64
+        })
+        .collect();
+
     for y in 0..dst_h {
-        let sy = y as f64 * y_ratio;
-        let sy_int = sy as usize;
-        let sy_frac = sy - sy_int as f64;
-        let sy2 = (sy_int + 1).min(src_h - 1);
+        let sy_frac = sy_fracs[y];
+        let row_off = src_rows[y];
+        let row_off2 = src_rows2[y];
+        let inv_sy = 1.0 - sy_frac;
+        let dst_row = y * dst_w;
 
         for x in 0..dst_w {
             let sx = x as f64 * x_ratio;
@@ -27,17 +70,24 @@ pub fn bilinear_upsample(
             let sx_frac = sx - sx_int as f64;
             let sx2 = (sx_int + 1).min(src_w - 1);
 
-            let a = src[sy_int * src_w + sx_int] as f64;
-            let b = src[sy_int * src_w + sx2] as f64;
-            let c = src[sy2 * src_w + sx_int] as f64;
-            let d = src[sy2 * src_w + sx2] as f64;
+            let a = src[row_off + sx_int] as f64;
+            let b = src[row_off + sx2] as f64;
+            let c = src[row_off2 + sx_int] as f64;
+            let d = src[row_off2 + sx2] as f64;
 
-            let val = a * (1.0 - sx_frac) * (1.0 - sy_frac)
-                + b * sx_frac * (1.0 - sy_frac)
-                + c * (1.0 - sx_frac) * sy_frac
-                + d * sx_frac * sy_frac;
+            let inv_sx = 1.0 - sx_frac;
+            let top = a * inv_sx + b * sx_frac;
+            let bot = c * inv_sx + d * sx_frac;
+            let val = top * inv_sy + bot * sy_frac;
 
-            dst[y * dst_w + x] = val.clamp(0.0, 255.0).round() as u8;
+            // Fast clamp path
+            dst[dst_row + x] = if val < 0.0 {
+                0u8
+            } else if val > 255.0 {
+                255u8
+            } else {
+                (val + 0.5) as u8
+            };
         }
     }
 }
@@ -46,14 +96,19 @@ pub fn bilinear_downsample(
     src: &[u8], src_w: usize, src_h: usize,
     dst: &mut [u8], dst_w: usize, dst_h: usize,
 ) {
+    if src_w == 0 || src_h == 0 || dst_w == 0 || dst_h == 0 {
+        return;
+    }
     let x_ratio = src_w as f64 / dst_w as f64;
     let y_ratio = src_h as f64 / dst_h as f64;
 
+    // Precompute source row indices
     for y in 0..dst_h {
-        let sy = (y as f64 * y_ratio) as usize;
+        let sy = ((y as f64 * y_ratio) as usize) * src_w;
+        let dst_row = y * dst_w;
         for x in 0..dst_w {
             let sx = (x as f64 * x_ratio) as usize;
-            dst[y * dst_w + x] = src[sy * src_w + sx];
+            dst[dst_row + x] = src[sy + sx];
         }
     }
 }

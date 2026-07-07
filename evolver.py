@@ -289,7 +289,7 @@ def main():
 
     for root, dirs, files in os.walk(BASE_CODE):
         for d in dirs:
-            if d in (".git", "node_modules", "target", "__pycache__"):
+            if d in (".git", ".opencode", "node_modules", "target", "__pycache__"):
                 shutil.rmtree(os.path.join(root, d))
         for f in files:
             if f == ".gitignore":

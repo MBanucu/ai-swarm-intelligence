@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-
 #[derive(Debug, Clone, Default)]
 pub struct HuffmanTable {
     pub id: u8,
     pub class: u8,
     pub codes: Vec<(u16, u8)>,
-    pub lookup: HashMap<(u16, u8), u8>,
     pub min_code: [i32; 16],
     pub max_code: [i32; 16],
     pub val_ptr: [i32; 16],
@@ -22,7 +19,6 @@ impl HuffmanTable {
             val_ptr: [-1i32; 16],
             values: values.to_vec(),
             codes: Vec::new(),
-            lookup: HashMap::new(),
         };
         table.build_tables(bits);
         table
@@ -36,32 +32,10 @@ impl HuffmanTable {
                 self.min_code[i] = code;
                 code += bits[i] as i32;
                 self.max_code[i] = code - 1;
-                let next = code;
-                code = next << 1;
             } else {
                 self.max_code[i] = -1;
-                let next = code;
-                code = next << 1;
             }
-        }
-    }
-
-    fn build_lookup(&mut self) {
-        for (idx, &val) in self.values.iter().enumerate() {
-            let mut len = 0;
-            for i in 0..16 {
-                if self.val_ptr[i] >= 0 {
-                    let offset = idx as i32 - self.val_ptr[i];
-                    if offset >= 0 && offset < (self.max_code[i] - self.min_code[i] + 1) {
-                        len = (i + 1) as u8;
-                        break;
-                    }
-                }
-            }
-            if len > 0 {
-                let code = self.min_code[(len - 1) as usize] as u16;
-                self.lookup.insert((code, len), val);
-            }
+            code <<= 1;
         }
     }
 }
