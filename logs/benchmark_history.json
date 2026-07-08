@@ -61,5 +61,12 @@
     "score": 999.9,
     "status": "extinction",
     "timestamp": "2026-07-08T16:00:12+02:00"
+  },
+  {
+    "gen": 2,
+    "attempt": 9,
+    "score": 56.995,
+    "status": "regression",
+    "timestamp": "2026-07-08T16:55:06+02:00"
   }
 ]

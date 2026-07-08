@@ -122,8 +122,10 @@ class ChildProcess:
             f"6) Baseline profiling: '{ROOT_DIR}/logs/baseline_perf.log' —"
             f" hardware performance counters (instructions, cycles,"
             f" cache-misses, branch-misses, task-clock) from the parent"
-            f" code's benchmark. This reveals CPU bottlenecks, cache behavior,"
-            f" and branch-prediction efficiency."
+            f" code's benchmark.\n"
+            f"7) Baseline per-function profile: '{ROOT_DIR}/logs/baseline_perf_report.log' —"
+            f" CPU sampling showing WHICH FUNCTIONS consume the most time."
+            f" This is the most actionable data for optimization."
             f" Compare sibling perf_stat.log files against this baseline.\n"
         )
         if self.sibling_failures:

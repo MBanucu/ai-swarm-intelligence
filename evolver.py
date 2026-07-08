@@ -52,6 +52,25 @@ def _run_baseline():
     if _perf_available() and os.path.exists(perf_log):
         print(f"\n[swarm] Perf profiling saved to {perf_log}")
 
+    if _perf_available():
+        perf_data = os.path.join(ROOT_DIR, "logs", "baseline_perf.data")
+        perf_report = os.path.join(ROOT_DIR, "logs", "baseline_perf_report.log")
+        record_cmd = ["perf", "record", "-g", "-F", "99", "-o", perf_data,
+                      "--"] + bench_args
+        proc2 = subprocess.Popen(
+            record_cmd, cwd=engine_dir,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        proc2.wait()
+        if proc2.returncode == 0 and os.path.exists(perf_data):
+            with open(perf_report, "w") as rf:
+                subprocess.run(
+                    ["perf", "report", "--stdio", "--percent-limit", "2",
+                     "--no-children", "-i", perf_data],
+                    stdout=rf, stderr=subprocess.DEVNULL,
+                )
+            print(f"[swarm] Perf report saved to {perf_report}")
+
     for line in reversed(output_lines):
         m = re.search(r'Fitness \(weighted avg\):\s*([\d.]+)\s*ns/block', line)
         if m:

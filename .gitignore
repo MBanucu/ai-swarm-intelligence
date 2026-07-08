@@ -4,8 +4,11 @@ __pycache__/
 generations/
 *.log
 *.score
+*.data
 target/
 
+!logs/baseline_perf.log
+!logs/baseline_perf_report.log
 !logs/winners/*.log
 !logs/winners/*.score
 !logs/winners/*.md
