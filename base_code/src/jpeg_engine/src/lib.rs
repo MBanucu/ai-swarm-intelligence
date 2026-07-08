@@ -171,6 +171,30 @@ pub extern "C" fn idct_2d_batch(blocks: *mut c_float, count: u32) {
 }
 
 #[no_mangle]
+pub extern "C" fn idct_2d_batch_cpu(blocks: *mut c_float, count: u32) {
+    let n = count as usize;
+    let slice = unsafe { std::slice::from_raw_parts_mut(blocks, n * 64) };
+    let blocks: &mut [[f32; 64]] = unsafe {
+        std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut [f32; 64], n)
+    };
+
+    idct::batch_idct_2d(blocks);
+}
+
+#[no_mangle]
+pub extern "C" fn idct_2d_batch_gpu(blocks: *mut c_float, count: u32) {
+    let n = count as usize;
+    let slice = unsafe { std::slice::from_raw_parts_mut(blocks, n * 64) };
+    let blocks: &mut [[f32; 64]] = unsafe {
+        std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut [f32; 64], n)
+    };
+
+    if let Some(kernel) = gpu_kernel() {
+        let _ = kernel.batch_idct_2d(blocks);
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn scale_upsample(
     input: *const u8, in_w: u16, in_h: u16,
     output: *mut u8, out_w: u16, out_h: u16,

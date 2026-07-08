@@ -1,4 +1,6 @@
 use jpeg_engine::idct_2d_batch;
+use jpeg_engine::idct_2d_batch_cpu;
+use jpeg_engine::idct_2d_batch_gpu;
 use rand::Rng;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -150,16 +152,21 @@ fn adaptive_iters(batch_size: usize, max_iters: usize) -> usize {
     (5_000_000 / batch_size).max(1).min(max_iters)
 }
 
-fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize) -> f64 {
+fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize, mode: &str) -> f64 {
     let batch_size = blocks.len();
-    idct_2d_batch(blocks.as_mut_ptr() as *mut f32, batch_size as u32);
+    let run = |b: &mut Vec<[f32; 64]>| match mode {
+        "cpu" => idct_2d_batch_cpu(b.as_mut_ptr() as *mut f32, batch_size as u32),
+        "gpu" => idct_2d_batch_gpu(b.as_mut_ptr() as *mut f32, batch_size as u32),
+        _ => idct_2d_batch(b.as_mut_ptr() as *mut f32, batch_size as u32),
+    };
+    run(blocks); // warm-up
 
     let rounds = 10;
     let mut samples = Vec::with_capacity(rounds);
     for _ in 0..rounds {
         let start = Instant::now();
         for _ in 0..iter_count {
-            idct_2d_batch(blocks.as_mut_ptr() as *mut f32, batch_size as u32);
+            run(blocks);
         }
         let elapsed = start.elapsed().as_secs_f64();
         samples.push(elapsed / iter_count as f64 / batch_size as f64 * 1_000_000_000.0);
@@ -172,7 +179,19 @@ fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize) -> f64 {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let max_iters: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5000);
+    let mut max_iters: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5000);
+    let mut mode = "auto";
+    let mut score_path = args.get(2).cloned().unwrap_or_else(|| "fitness.score".to_string());
+
+    for i in 1..args.len() {
+        if args[i] == "--mode" {
+            mode = args.get(i + 1).map(|s| s.as_str()).unwrap_or("auto");
+        } else if args[i] == "--iters" {
+            max_iters = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(5000);
+        } else if args[i] == "-o" {
+            score_path = args.get(i + 1).cloned().unwrap_or_else(|| "fitness.score".to_string());
+        }
+    }
 
     validate();
 
@@ -197,7 +216,7 @@ fn main() {
         Batch { size: 250000, label: "250K",   weight: 0.50 },
     ];
 
-    println!("\nBenchmark (max {} iters/round, adaptive):", max_iters);
+    println!("\nBenchmark (max {} iters/round, adaptive, mode={}):", max_iters, mode);
     println!("  {:>7} {:>7} {:>10} {:>8}", "Batch", "Blocks", "ns/block", "Weight");
     println!("  {:->7} {:->7} {:->10} {:->8}", "", "", "", "");
 
@@ -207,7 +226,7 @@ fn main() {
     for batch in &batches {
         let iters = adaptive_iters(batch.size, max_iters);
         let mut blocks = create_blocks(batch.size);
-        let ns = benchmark(&mut blocks, iters);
+        let ns = benchmark(&mut blocks, iters, mode);
         println!("  {:>7} {:>7} {:>10.3} {:>7.0}%", batch.label, batch.size, ns, batch.weight * 100.0);
         total += ns as f32 * batch.weight;
         total_weight += batch.weight;
@@ -215,7 +234,6 @@ fn main() {
 
     assert!((total_weight - 1.0).abs() < 0.001, "weights must sum to 1.0");
 
-    let score_path = args.get(2).cloned().unwrap_or_else(|| "fitness.score".to_string());
     fs::write(&score_path, format!("{:.3}", total)).unwrap();
     println!("\nFitness (weighted avg): {:.3} ns/block -> {}", total, score_path);
 }

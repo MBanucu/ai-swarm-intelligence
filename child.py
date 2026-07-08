@@ -124,9 +124,11 @@ class ChildProcess:
             f" cache-misses, branch-misses, task-clock) from the parent"
             f" code's benchmark.\n"
             f"7) Baseline per-function annotation: '{ROOT_DIR}/logs/baseline_perf_annotate_*.log' —"
-            f" instruction-level CPU cycle breakdown for hot functions."
-            f" Shows exactly which loads, shuffles, and arithmetic ops"
-            f" consume the most time inside each function.\n"
+            f" instruction-level CPU cycle breakdown for hot functions.\n"
+            f"8) CPU-only baseline: '{ROOT_DIR}/logs/baseline_cpu.score' —"
+            f" fitness score with all batches forced to CPU path.\n"
+            f"9) GPU-only baseline: '{ROOT_DIR}/logs/baseline_gpu.score' —"
+            f" fitness score with all batches forced to GPU path.\n"
         )
         if self.sibling_failures:
             for f in self.sibling_failures[-5:]:

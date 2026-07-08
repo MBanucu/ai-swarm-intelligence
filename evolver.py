@@ -27,13 +27,22 @@ def _perf_available():
 
 
 def _run_baseline():
+    return _run_baseline_path(
+        "auto", "/dev/stdout",
+        with_perf=True,
+    )
+
+
+def _run_baseline_path(mode, score_path, with_perf=False):
     engine_dir = os.path.join(BASE_CODE, "src", "jpeg_engine")
-    perf_log = os.path.join(ROOT_DIR, "logs", "baseline_perf.log")
 
     bench_args = ["cargo", "run", "--release",
-                   "--bin", "bench", "--", "5000", "/dev/stdout"]
-    if _perf_available():
-        cmd = ["perf", "stat", "-e", _PERF_EVENTS, "-o", perf_log, "--"] + bench_args
+                   "--bin", "bench", "--", "5000",
+                   "--mode", mode, "-o", score_path]
+    if _perf_available() and with_perf:
+        cmd = ["perf", "stat", "-e", _PERF_EVENTS, "-o",
+               os.path.join(ROOT_DIR, "logs", "baseline_perf.log"),
+               "--"] + bench_args
     else:
         cmd = bench_args
 
@@ -49,10 +58,7 @@ def _run_baseline():
     if proc.returncode != 0:
         return None
 
-    if _perf_available() and os.path.exists(perf_log):
-        print(f"\n[swarm] Perf profiling saved to {perf_log}")
-
-    if _perf_available():
+    if _perf_available() and with_perf:
         perf_data = os.path.join(ROOT_DIR, "logs", "baseline_perf.data")
         perf_report = os.path.join(ROOT_DIR, "logs", "baseline_perf_report.log")
         record_cmd = ["perf", "record", "-g", "-F", "99", "-o", perf_data,
@@ -82,7 +88,7 @@ def _run_baseline():
                 )
                 with open(annot_path, "w") as af:
                     af.write(result.stdout or "(no annotation data)\n")
-            print(f"[swarm] Perf reports saved to logs/baseline_perf_*.log")
+            print(f"\n[swarm] Perf reports saved to logs/baseline_perf_*.log")
 
     for line in reversed(output_lines):
         m = re.search(r'Fitness \(weighted avg\):\s*([\d.]+)\s*ns/block', line)
@@ -214,6 +220,13 @@ def main():
         elif baseline < prev_best:
             print(f"[swarm] Basline {baseline:.6f} < previous {prev_best:.6f} - tightening floor")
             prev_best = baseline
+
+    for mode, label in [("cpu", "CPU-only"), ("gpu", "GPU-only")]:
+        print(f"\n[swarm] Running {label} baseline...")
+        cpu_score = _run_baseline_path(mode,
+            os.path.join(ROOT_DIR, "logs", f"baseline_{mode}.score"))
+        if cpu_score is not None:
+            print(f"[swarm] {label} baseline: {cpu_score:.3f}ns/block")
     print()
 
     gen_dir = os.path.join(ROOT_DIR, "generations", f"gen_{gen}")
