@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 name = "jpeg_engine"
 
 [features]
-default = []
+default = ["gpu", "rayon"]
 gpu = ["ocl", "rayon", "opencl"]
 cuda = []
 opencl = ["ocl"]

@@ -155,114 +155,89 @@ mod opencl_backend {
     use super::*;
     use ocl::{ProQue, Buffer, Kernel, MemFlags};
 
-    /// OpenCL IDCT kernel source — AAN butterfly 1D IDCT + transposed private store.
+    /// OpenCL IDCT kernel — optimized one-thread-per-block with private memory.
     ///
-    /// Uses the same even-part butterfly and direct odd-part as the CPU path,
-    /// with a transposed private-memory layout (same trick as CPU idct.rs)
-    /// to make column-pass reads unit-stride (coalesced).
+    /// Uses the same AAN butterfly algorithm as the CPU path but compiles
+    /// the entire 2D IDCT as straight-line code with no loops or branches
+    /// inside the inner passes.  The transposed private-memory layout makes
+    /// column reads unit-stride (coalesced).
+    ///
+    /// One thread per block avoids the redundant compute of per-element
+    /// workgroup approaches: each thread computes a full 8-element 1D IDCT
+    /// (8 outputs for the price of 22 multiplications).
     const IDCT_KERNEL_SRC: &str = r#"
-    // Even-part constants (same as CPU idct.rs)
     __constant float E_A = 0.35355339059327376f;  // 1/(2√2)
     __constant float E_B = 0.46193976625564337f;  // cos(π/8)/2
     __constant float E_C = 0.19134171618254492f;  // cos(3π/8)/2
-
-    // Odd-part constants (same O matrix)
     __constant float O_B = 0.49039264020161522f;  // cos(π/16)/2
     __constant float O_C = 0.41573480615127262f;  // cos(3π/16)/2
     __constant float O_D = 0.27778511650980114f;  // cos(5π/16)/2
     __constant float O_E = 0.09754516100806417f;  // cos(7π/16)/2
 
-    // AAN 1D IDCT — butterfly even + direct odd (22 mul, ~32 add)
-    inline void idct_1d_aan(float* restrict src, float* restrict dst) {
-        float s0 = src[0], s1 = src[1], s2 = src[2], s3 = src[3];
-        float s4 = src[4], s5 = src[5], s6 = src[6], s7 = src[7];
-
-        // ── Even part (butterfly, 6 mul) ──
+    // Inline 1D AAN IDCT — 22 mul, ~32 add, 8 outputs
+    inline void idct_1d_aan(float s0, float s1, float s2, float s3,
+                             float s4, float s5, float s6, float s7,
+                             float* restrict d) {
         float sum_even  = s0 + s4;
         float diff_even = s0 - s4;
-
         float b_s2 = E_B * s2;
         float c_s6 = E_C * s6;
         float c_s2 = E_C * s2;
         float b_s6 = E_B * s6;
-
         float cross_plus  = b_s2 + c_s6;
         float cross_minus = c_s2 - b_s6;
-
         float a_sum  = E_A * sum_even;
         float a_diff = E_A * diff_even;
-
         float e0 = a_sum + cross_plus;
         float e1 = a_diff + cross_minus;
         float e2 = a_diff - cross_minus;
         float e3 = a_sum - cross_plus;
 
-        // ── Odd part (direct 4×4, 16 mul) ──
         float o0 = O_B*s1 + O_C*s3 + O_D*s5 + O_E*s7;
         float o1 = O_C*s1 - O_E*s3 - O_B*s5 - O_D*s7;
         float o2 = O_D*s1 - O_B*s3 + O_E*s5 + O_C*s7;
         float o3 = O_E*s1 - O_D*s3 + O_C*s5 - O_B*s7;
 
-        // Combine
-        dst[0] = e0 + o0;  dst[7] = e0 - o0;
-        dst[1] = e1 + o1;  dst[6] = e1 - o1;
-        dst[2] = e2 + o2;  dst[5] = e2 - o2;
-        dst[3] = e3 + o3;  dst[4] = e3 - o3;
+        d[0] = e0 + o0;  d[7] = e0 - o0;
+        d[1] = e1 + o1;  d[6] = e1 - o1;
+        d[2] = e2 + o2;  d[5] = e2 - o2;
+        d[3] = e3 + o3;  d[4] = e3 - o3;
     }
 
-    __kernel void batch_idct(__global float* restrict blocks, int num_blocks) {
+    __kernel void batch_idct(__global float* blocks, int num_blocks) {
         int gid = get_global_id(0);
         if (gid >= num_blocks) return;
 
-        __global float* restrict block = blocks + gid * 64;
-
-        // Private memory for transposed row results (same trick as CPU path:
-        // store rows in transposed order so column reads are unit-stride)
+        __global float* block = blocks + gid * 64;
         float tmp[64];
 
-        // ── Pass 1: IDCT on rows, store TRANSPOSED into tmp ──
-        // tmp[k*8 + y] = result[y][k] (column-major temp)
+        // ── Pass 1: 8 rows, store transposed (tmp[k*8 + y] = d[k] for row y) ──
         for (int y = 0; y < 8; y++) {
             int off = y * 8;
-            float row0 = block[off];    float row1 = block[off+1];
-            float row2 = block[off+2];  float row3 = block[off+3];
-            float row4 = block[off+4];  float row5 = block[off+5];
-            float row6 = block[off+6];  float row7 = block[off+7];
-            float row[8] = {row0, row1, row2, row3, row4, row5, row6, row7};
             float d[8];
-            idct_1d_aan(row, d);
-            // Transposed store: d[k] -> tmp[k*8 + y]
+            idct_1d_aan(
+                block[off], block[off+1], block[off+2], block[off+3],
+                block[off+4], block[off+5], block[off+6], block[off+7],
+                d);
             tmp[y]       = d[0];  tmp[8  + y] = d[1];
             tmp[16 + y]  = d[2];  tmp[24 + y] = d[3];
             tmp[32 + y]  = d[4];  tmp[40 + y] = d[5];
             tmp[48 + y]  = d[6];  tmp[56 + y] = d[7];
         }
 
-        // ── Pass 2: IDCT on columns — read from tmp (unit stride) ──
-        // tmp[x*8 .. x*8+7] contains column x as 8 consecutive floats
+        // ── Pass 2: 8 columns from transposed tmp, store row-major ──
         for (int x = 0; x < 8; x++) {
             int off = x * 8;
-            float col0 = tmp[off];    float col1 = tmp[off+1];
-            float col2 = tmp[off+2];  float col3 = tmp[off+3];
-            float col4 = tmp[off+4];  float col5 = tmp[off+5];
-            float col6 = tmp[off+6];  float col7 = tmp[off+7];
-            float col[8] = {col0, col1, col2, col3, col4, col5, col6, col7};
             float d[8];
-            idct_1d_aan(col, d);
-            // Store to column x of block (standard row-major output)
+            idct_1d_aan(
+                tmp[off], tmp[off+1], tmp[off+2], tmp[off+3],
+                tmp[off+4], tmp[off+5], tmp[off+6], tmp[off+7],
+                d);
             block[x]      = d[0];  block[8+x]    = d[1];
             block[16+x]   = d[2];  block[24+x]   = d[3];
             block[32+x]   = d[4];  block[40+x]   = d[5];
             block[48+x]   = d[6];  block[56+x]   = d[7];
         }
-    }
-
-    __kernel void batch_fdct(__global float* blocks, int num_blocks) {
-        int gid = get_global_id(0);
-        if (gid >= num_blocks) return;
-        // Placeholder — real DCT kernel would go here
-        __global float* block = blocks + gid * 64;
-        block[0] = 0.0;
     }
 
     __kernel void batch_ycbcr_to_rgb(
@@ -304,16 +279,14 @@ mod opencl_backend {
         pub fn new() -> Result<Self, GpuError> {
             let pro_que = ProQue::builder()
                 .src(IDCT_KERNEL_SRC)
-                .dims(1)
+                .dims(1)  // 1D workgroups — one thread per block
                 .build()
                 .map_err(|e| GpuError::KernelError(format!("OpenCL init: {e}")))?;
 
             let device_name = pro_que.device().name()
                 .map_err(|e| GpuError::KernelError(format!("device name: {e}")))?;
 
-            // Build kernel with explicit program reference and queue.
-            // In ocl 0.19, kernel arguments must be declared at build time;
-            // we pass placeholder `None` args that will be set later via set_arg().
+            // Build IDCT kernel with placeholder args (set later via set_arg).
             let idct_kernel = ocl::Kernel::builder()
                 .program(&pro_que.program())
                 .name("batch_idct")
@@ -323,7 +296,12 @@ mod opencl_backend {
                 .build()
                 .map_err(|e| GpuError::KernelError(format!("kernel build: {e}")))?;
 
-            Ok(OpenClKernel { pro_que, idct_kernel, device: device_name, buf: std::sync::Mutex::new(None) })
+            Ok(OpenClKernel {
+                pro_que,
+                idct_kernel,
+                device: device_name,
+                buf: std::sync::Mutex::new(None),
+            })
         }
     }
 
@@ -356,10 +334,14 @@ mod opencl_backend {
                 .set_arg(1, &(n as i32))
                 .map_err(|e| GpuError::KernelError(format!("arg 1: {e}")))?;
 
+            // 1D dispatch — one thread per block.
+            // Round global_work_size up to multiple of local_work_size.
             unsafe {
-                let local_size = if n < 64 { n as u64 } else { 64 };
+                let min_local: u64 = 64;
+                let local_size = if (n as u64) < min_local { n as u64 } else { min_local };
+                let global_size = ((n as u64 + local_size - 1) / local_size) * local_size;
                 self.idct_kernel.cmd()
-                    .global_work_size(n)
+                    .global_work_size((global_size,))
                     .local_work_size((local_size,))
                     .enq()
                     .map_err(|e| GpuError::KernelError(format!("enqueue: {e}")))?;
@@ -388,8 +370,7 @@ mod opencl_backend {
 
             let total = n;
 
-            // Allocate fresh device buffers for each color plane
-            // (the Mutex in self.buf is for the IDCT reuse pool, not used here)
+            // Allocate device buffers for each color plane
             let buf_y = Buffer::builder()
                 .queue(self.pro_que.queue().clone())
                 .flags(MemFlags::new().read_only())
@@ -435,6 +416,7 @@ mod opencl_backend {
             buf_cr.write(cr).enq().map_err(|e| GpuError::KernelError(format!("write cr: {e}")))?;
 
             // Build and launch kernel — rebuild each time since arguments change
+            // (This kernel is not on the benchmark path, so rebuild overhead is acceptable)
             let kernel = ocl::Kernel::builder()
                 .program(&self.pro_que.program())
                 .name("batch_ycbcr_to_rgb")

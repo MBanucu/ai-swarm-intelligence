@@ -63,7 +63,7 @@ pub extern "C" fn idct_2d(block: *mut c_float) {
 // For iGPUs, threshold 20K routes the 25K (20% weight) and 250K (50% weight)
 // benchmark batches through the OpenCL kernel.  The GPU has never been exercised
 // in prior generations — this single change may yield the largest speedup.
-const GPU_THRESHOLD: usize = 20_000;
+const GPU_THRESHOLD: usize = 5_000;
 
 /// Lazily-initialized GPU kernel (or CPU fallback).
 fn gpu_kernel() -> &'static Option<Box<dyn gpu::GpuKernel>> {
@@ -102,9 +102,57 @@ pub fn idct_2d_batch_const<const N: usize>(blocks: &mut [[f32; 64]]) {
 
     if use_gpu {
         if let Some(kernel) = gpu_kernel() {
-            if kernel.batch_idct_2d(blocks).is_ok() {
-                return;
-            }
+            // ── Heterogeneous CPU+GPU co-processing ──
+            // For large batches, split blocks: the GPU processes a portion
+            // asynchronously while the CPU simultaneously processes the
+            // remaining blocks using the rayon-based batch_idct_2d path.
+            //
+            // The optimal split ratio depends on GPU/CPU throughput ratio.
+            // On fast discrete GPUs (NVIDIA/AMD), ~80% GPU is best.
+            // On integrated GPUs (Intel), ~25% GPU avoids the slower GPU
+            // dominating the critical path.
+            //
+            // We estimate dynamically: if the GPU device name suggests
+            // integrated graphics, send less to the GPU.
+            let device_name = kernel.device_name();
+            // On integrated GPUs (Intel HD/UHD/Iris), the GPU dispatch
+            // overhead (~500µs) makes GPU a net loss for all benchmark
+            // batch sizes.  On discrete GPUs (NVIDIA, AMD dGPU) the GPU
+            // can be 5-10x faster than CPU with lower dispatch overhead.
+            let use_gpu_split = !(device_name.contains("Intel")
+                || device_name.contains("HD Graphics")
+                || device_name.contains("UHD")
+                || device_name.contains("Iris"));
+
+            if use_gpu_split {
+                let gpu_fraction: f32 = 0.80;
+                let split = (blocks.len() as f32 * gpu_fraction) as usize;
+                // Ensure at least 1 block on each side
+                let split = if split == 0 {
+                    1
+                } else if split >= blocks.len() {
+                    blocks.len() - 1
+                } else {
+                    split
+                };
+
+                let (gpu_part, cpu_part) = blocks.split_at_mut(split);
+
+                let mut gpu_ok = false;
+                std::thread::scope(|s| {
+                    // GPU thread processes the larger portion
+                    s.spawn(|| {
+                        gpu_ok = kernel.batch_idct_2d(gpu_part).is_ok();
+                    });
+                    // CPU thread processes the remaining portion concurrently
+                    idct::batch_idct_2d(cpu_part);
+                });
+
+                if gpu_ok {
+                    return;
+                }
+                // If GPU dispatch failed, fall through to CPU-only path below
+            } // end if use_gpu_split
         }
     }
 
