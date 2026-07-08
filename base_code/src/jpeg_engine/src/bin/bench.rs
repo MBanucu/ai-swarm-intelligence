@@ -150,7 +150,7 @@ fn adaptive_iters(batch_size: usize, max_iters: usize) -> usize {
     (5_000_000 / batch_size).max(1).min(max_iters)
 }
 
-fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize, label: &str) -> f64 {
+fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize) -> f64 {
     let batch_size = blocks.len();
     idct_2d_batch(blocks.as_mut_ptr() as *mut f32, batch_size as u32);
 
@@ -167,7 +167,6 @@ fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize, label: &str) -> f64
 
     samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let median = samples[samples.len() / 2];
-    println!("  {:<10} {:>7} blocks  {:>9.3} ns/block", label, batch_size, median);
     median
 }
 
@@ -199,8 +198,8 @@ fn main() {
     ];
 
     println!("\nBenchmark (max {} iters/round, adaptive):", max_iters);
-    println!("  {:>10} {:>7} {:>11} {:>7}", "Batch", "Blocks", "ns/block", "Weight");
-    println!("  ---------- ------- ----------- -------");
+    println!("  {:>7} {:>7} {:>10} {:>8}", "Batch", "Blocks", "ns/block", "Weight");
+    println!("  {:->7} {:->7} {:->10} {:->8}", "", "", "", "");
 
     let mut total: f32 = 0.0;
     let mut total_weight: f32 = 0.0;
@@ -208,8 +207,8 @@ fn main() {
     for batch in &batches {
         let iters = adaptive_iters(batch.size, max_iters);
         let mut blocks = create_blocks(batch.size);
-        let ns = benchmark(&mut blocks, iters, batch.label);
-        println!("  {:>10} {:>7} {:>9.3} {:>6.0}%", batch.label, batch.size, ns, batch.weight * 100.0);
+        let ns = benchmark(&mut blocks, iters);
+        println!("  {:>7} {:>7} {:>10.3} {:>7.0}%", batch.label, batch.size, ns, batch.weight * 100.0);
         total += ns as f32 * batch.weight;
         total_weight += batch.weight;
     }
