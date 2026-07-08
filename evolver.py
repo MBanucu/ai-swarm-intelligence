@@ -224,20 +224,30 @@ def main():
     failure_dir = os.path.join(gen_dir, "failures")
     os.makedirs(failure_dir, exist_ok=True)
 
+    gen_history = []
     if os.path.exists(BENCHMARK_HISTORY):
         with open(BENCHMARK_HISTORY) as f:
-            history = json.load(f)
-        for entry in history:
-            if entry.get("gen") == gen and entry.get("status") == "best":
-                best_score = float(entry["score"])
-                winner_attempt = entry["attempt"]
-                winner_dir = os.path.join(gen_dir, f"child_{winner_attempt}")
-                if os.path.isdir(winner_dir):
-                    print(f"[swarm] Restored previous best: attempt {winner_attempt}"
-                          f" = {best_score:.3f}ns/block")
-                else:
-                    winner_dir = None
-                break
+            gen_history = [
+                e for e in json.load(f)
+                if e.get("gen") == gen
+            ]
+
+    for entry in gen_history:
+        if entry.get("status") == "best":
+            best_score = float(entry["score"])
+            winner_attempt = entry["attempt"]
+            winner_dir = os.path.join(gen_dir, f"child_{winner_attempt}")
+            if os.path.isdir(winner_dir):
+                print(f"[swarm] Restored previous best: attempt {winner_attempt}"
+                      f" = {best_score:.3f}ns/block")
+            else:
+                winner_dir = None
+            break
+
+    bench_attempts = {
+        e["attempt"]: f"{e.get('score', '?')}ns ({e.get('status', '?')})"
+        for e in gen_history if "attempt" in e
+    }
 
     for fn in sorted(os.listdir(failure_dir)):
         if fn.startswith("attempt_") and fn.endswith(".txt"):
@@ -255,6 +265,12 @@ def main():
                 })
 
     for attempt in range(start_attempt, MAX_RETRIES + 1):
+        if attempt in bench_attempts:
+            print()
+            print(f"  Generation {gen} - Attempt {attempt} already recorded"
+                  f" ({bench_attempts[attempt]}), skipping")
+            continue
+
         print()
         print("=" * 70)
         print(f"  Generation {gen} - Attempt {attempt} of {MAX_RETRIES}")
