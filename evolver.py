@@ -14,6 +14,7 @@ BASE_CODE = os.path.join(ROOT_DIR, "base_code")
 ARCHIVE_DIR = os.path.join(ROOT_DIR, "logs", "archived_agents")
 BASE_TEMPLATE = os.path.join(ROOT_DIR, ".opencode", "agents", "base_template.md")
 BENCHMARK_HISTORY = os.path.join(ROOT_DIR, "logs", "benchmark_history.md")
+IMPROVEMENT_DIR = os.path.join(ROOT_DIR, "improvement_suggestions")
 
 
 class ChildProcess:
@@ -73,6 +74,9 @@ class ChildProcess:
             f"   Focus on src/jpeg_engine/src/ and Cargo.toml.\n"
             f"3) Archived winner agents: '{ARCHIVE_DIR}' — strategies used by past winners.\n"
             f"4) Parent agent template: '{self.parent_agent_path}' — the mutation baseline.\n"
+            f"5) Improvement suggestions: '{IMPROVEMENT_DIR}' — external"
+            f" optimization ideas to consider. Read EVERY .md file in this"
+            f" directory.\n"
         )
         if self.sibling_failures:
             prompt += (
@@ -161,7 +165,8 @@ class ChildProcess:
         prompt = (
             f"Read the parent template at '{self.parent_agent_path}'.\n"
             f"Read the strategy analysis at '{self.analysis_path}'.\n"
-            f"Read the benchmark history at '{BENCHMARK_HISTORY}' if it exists.\n\n"
+            f"Read the benchmark history at '{BENCHMARK_HISTORY}' if it exists.\n"
+            f"Read all files in '{IMPROVEMENT_DIR}' for external optimization ideas.\n\n"
             f"CRITICAL: Follow the RECOMMENDED STRATEGIES from the analysis."
             f" Avoid the strategies listed as AVOID."
             f" The analysis studied performance trends and past failures"
