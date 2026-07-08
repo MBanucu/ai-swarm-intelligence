@@ -278,6 +278,7 @@ def main():
         "fitness.score", "lifecycle.log", "mutation.log",
         "test_output.log", "death_test.log", "benchmark.log",
         "fitness_history.json", "analysis.md", "analysis.log",
+        "perf_stat.log",
     ):
         jp = os.path.join(BASE_CODE, junk)
         if os.path.exists(jp):
@@ -298,6 +299,16 @@ def main():
         os.path.join(winner_dir, ".opencode", "agents", "dct-evolver.md"),
         os.path.join(ARCHIVE_DIR, f"gen_{gen}_winner.md"),
     )
+
+    winner_log_dir = os.path.join(ROOT_DIR, "logs", "winners", f"gen_{gen}")
+    os.makedirs(winner_log_dir, exist_ok=True)
+    for logfile in (
+        "perf_stat.log", "benchmark.log", "lifecycle.log",
+        "analysis.md", "fitness.score",
+    ):
+        src = os.path.join(winner_dir, logfile)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(winner_log_dir, logfile))
 
     subprocess.run(["git", "-C", ROOT_DIR, "add", "-A"], check=False)
 

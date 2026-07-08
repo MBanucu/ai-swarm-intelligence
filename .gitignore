@@ -5,3 +5,7 @@ generations/
 *.log
 *.score
 target/
+
+!logs/winners/*.log
+!logs/winners/*.score
+!logs/winners/*.md
