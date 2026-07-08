@@ -1,31 +1,32 @@
-use half::f16;
 use jpeg_engine::idct_2d_batch;
 use rand::Rng;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::env;
 use std::fs;
+use std::f32::consts::PI;
 use std::time::Instant;
 
-fn c(k: usize) -> f64 {
-    if k == 0 { 1.0 / (2.0f64).sqrt() } else { 1.0 }
+fn c(k: usize) -> f32 {
+    if k == 0 { 1.0 / (2.0f32).sqrt() } else { 1.0 }
 }
 
-/// Reference IDCT using f64 precision, returns f16.
-fn reference_idct_2d(block: &[f16; 64]) -> [f16; 64] {
-    let mut out = [f16::ZERO; 64];
+/// Naive O(N^4) reference IDCT — mathematically correct implementation
+/// of the 2D IDCT formula. Used to validate the engine's output.
+fn reference_idct_2d(block: &[f32; 64]) -> [f32; 64] {
+    let mut out = [0.0f32; 64];
     for y in 0..8 {
         for x in 0..8 {
-            let mut sum = 0.0f64;
+            let mut sum = 0.0;
             for v in 0..8 {
                 for u in 0..8 {
                     sum += c(u) * c(v)
-                        * block[v * 8 + u].to_f64()
-                        * ((2 * x + 1) as f64 * u as f64 * std::f64::consts::PI / 16.0).cos()
-                        * ((2 * y + 1) as f64 * v as f64 * std::f64::consts::PI / 16.0).cos();
+                        * block[v * 8 + u] as f32
+                        * ((2 * x + 1) as f32 * u as f32 * PI / 16.0).cos()
+                        * ((2 * y + 1) as f32 * v as f32 * PI / 16.0).cos();
                 }
             }
-            out[y * 8 + x] = f16::from_f64(0.25 * sum);
+            out[y * 8 + x] = 0.25 * sum;
         }
     }
     out
@@ -33,26 +34,29 @@ fn reference_idct_2d(block: &[f16; 64]) -> [f16; 64] {
 
 fn validate() {
     let mut rng = StdRng::seed_from_u64(0xbad_f00d_cafe_1337);
-    let epsilon = f16::from_f32(50.0);
+    let epsilon = 0.5;
 
-    let mut test_cases: Vec<[f16; 64]> = Vec::new();
+    let mut test_cases: Vec<[f32; 64]> = Vec::new();
 
-    let mut dc_block = [f16::ZERO; 64];
-    dc_block[0] = f16::from_f32(128.0);
+    // DC-only block
+    let mut dc_block = [0.0f32; 64];
+    dc_block[0] = 128.0;
     test_cases.push(dc_block);
 
+    // Single AC coefficient at various positions
     for k in 1..5 {
-        let mut ac_block = [f16::ZERO; 64];
-        ac_block[k] = f16::from_f32(64.0);
+        let mut ac_block = [0.0f32; 64];
+        ac_block[k] = 64.0;
         test_cases.push(ac_block);
     }
 
+    // Random blocks with realistic magnitude
     for _ in 0..20 {
-        let mut b = [f16::ZERO; 64];
-        b[0] = f16::from_f64((rng.gen::<f64>() - 0.5) * 2048.0);
+        let mut b = [0.0f32; 64];
+        b[0] = (rng.gen::<f32>() - 0.5) * 2048.0;
         for j in 1..64 {
-            let scale = 256.0 / (j as f64).sqrt();
-            b[j] = f16::from_f64((rng.gen::<f64>() - 0.5) * 2.0 * scale);
+            let scale = 256.0 / (j as f32).sqrt();
+            b[j] = (rng.gen::<f32>() - 0.5) * 2.0 * scale;
         }
         test_cases.push(b);
     }
@@ -62,17 +66,13 @@ fn validate() {
     for (i, block) in test_cases.iter().enumerate() {
         let expected = reference_idct_2d(block);
         let mut engine_block = *block;
-        idct_2d_batch(engine_block.as_mut_ptr() as *mut u16, 1);
+        idct_2d_batch(engine_block.as_mut_ptr() as *mut f32, 1);
 
         for j in 0..64 {
-            let diff = if engine_block[j] > expected[j] {
-                engine_block[j] - expected[j]
-            } else {
-                expected[j] - engine_block[j]
-            };
+            let diff = (engine_block[j] - expected[j]).abs();
             if diff > epsilon {
                 eprintln!(
-                    "VALIDATION FAILED: test case {} coefficient {}: engine={:.3?} reference={:.3?} diff={:.3?}",
+                    "VALIDATION FAILED: test case {} coefficient {}: engine={:.6} reference={:.6} diff={:.6}",
                     i, j, engine_block[j], expected[j], diff
                 );
                 std::process::exit(1);
@@ -81,40 +81,40 @@ fn validate() {
     }
     println!("Validation: all {} test cases passed.", test_cases.len());
 
+    // Batch validation — full reference for small sizes, spot-check for large
     let batch_sizes: &[(usize, usize)] = &[
-        (10, 0), (1000, 0), (25000, 0), (250000, 20),
+        (10, 0),        // 0 = full comparison
+        (1000, 0),
+        (25000, 0),
+        (250000, 20),   // spot-check first 20 blocks only
     ];
 
     for &(batch_size, check_n) in batch_sizes {
         let check_count = if check_n == 0 { batch_size } else { check_n };
 
-        let mut blocks: Vec<[f16; 64]> = (0..batch_size).map(|i| {
-            let mut b = [f16::ZERO; 64];
-            b[0] = f16::from_f64((i as f64 - 0.5) * 64.0);
+        let mut blocks: Vec<[f32; 64]> = (0..batch_size).map(|i| {
+            let mut b = [0.0f32; 64];
+            b[0] = (i as f32 - 0.5) * 64.0;
             for j in 1..64 {
-                b[j] = f16::from_f64(((i * j) as f64 % 128.0) - 64.0);
+                b[j] = ((i * j) as f32 % 128.0) - 64.0;
             }
             b
         }).collect();
 
-        let expected: Vec<[f16; 64]> = blocks[..check_count]
+        let expected: Vec<[f32; 64]> = blocks[..check_count]
             .iter().map(|b| reference_idct_2d(b)).collect();
 
-        let ptr = blocks.as_mut_ptr() as *mut u16;
+        let ptr = blocks.as_mut_ptr() as *mut f32;
         idct_2d_batch(ptr, blocks.len() as u32);
 
         for (k, (engine_block, ref_block)) in blocks[..check_count]
             .iter().zip(expected.iter()).enumerate()
         {
             for j in 0..64 {
-                let diff = if engine_block[j] > ref_block[j] {
-                    engine_block[j] - ref_block[j]
-                } else {
-                    ref_block[j] - engine_block[j]
-                };
+                let diff = (engine_block[j] - ref_block[j]).abs();
                 if diff > epsilon {
                     eprintln!(
-                        "BATCH VALIDATION FAILED: batch_size={} block={} coeff={}: engine={:.3?} reference={:.3?} diff={:.3?}",
+                        "BATCH VALIDATION FAILED: batch_size={} block={} coeff={}: engine={:.6} reference={:.6} diff={:.6}",
                         batch_size, k, j, engine_block[j], ref_block[j], diff
                     );
                     std::process::exit(1);
@@ -126,37 +126,40 @@ fn validate() {
     }
 }
 
-fn create_blocks(count: usize) -> Vec<[f16; 64]> {
+fn create_blocks(count: usize) -> Vec<[f32; 64]> {
     let mut rng = StdRng::seed_from_u64(0xdead_beef_cafe_babe);
     (0..count).map(|_| {
-        let mut b = [f16::ZERO; 64];
-        let dc = f16::from_f64((rng.gen::<f64>() - 0.5) * 2048.0);
-        let dc_q = f16::from_f32(8.0);
-        b[0] = f16::from_f64((dc.to_f64() / dc_q.to_f64()).round() * dc_q.to_f64());
+        let mut b = [0.0f32; 64];
+        let dc = (rng.gen::<f32>() - 0.5) * 2048.0;
+        let dc_q = 8.0;
+        b[0] = (dc / dc_q).round() * dc_q;
         for j in 1..64 {
-            let scale = 256.0 / (j as f64).sqrt();
-            let val = f16::from_f64((rng.gen::<f64>() - 0.5) * 2.0 * scale);
-            let q = f16::from_f64((j as f64 / 8.0 + 1.0) * 4.0);
-            b[j] = f16::from_f64((val.to_f64() / q.to_f64()).round() * q.to_f64());
+            let scale = 256.0 / (j as f32).sqrt();
+            let val = (rng.gen::<f32>() - 0.5) * 2.0 * scale;
+            let q = (j as f32 / 8.0 + 1.0) * 4.0;
+            b[j] = (val / q).round() * q;
         }
         b
     }).collect()
 }
 
+/// Scale iteration count inversely with batch size so total work stays
+/// bounded. Large batches get fewer iterations per round to avoid
+/// multi-minute benchmarks on 250K+ blocks.
 fn adaptive_iters(batch_size: usize, max_iters: usize) -> usize {
     (5_000_000 / batch_size).max(1).min(max_iters)
 }
 
-fn benchmark(blocks: &mut Vec<[f16; 64]>, iter_count: usize, label: &str) -> f64 {
+fn benchmark(blocks: &mut Vec<[f32; 64]>, iter_count: usize, label: &str) -> f64 {
     let batch_size = blocks.len();
-    idct_2d_batch(blocks.as_mut_ptr() as *mut u16, batch_size as u32);
+    idct_2d_batch(blocks.as_mut_ptr() as *mut f32, batch_size as u32);
 
     let rounds = 10;
     let mut samples = Vec::with_capacity(rounds);
     for _ in 0..rounds {
         let start = Instant::now();
         for _ in 0..iter_count {
-            idct_2d_batch(blocks.as_mut_ptr() as *mut u16, batch_size as u32);
+            idct_2d_batch(blocks.as_mut_ptr() as *mut f32, batch_size as u32);
         }
         let elapsed = start.elapsed().as_secs_f64();
         samples.push(elapsed / iter_count as f64 / batch_size as f64 * 1_000_000_000.0);
@@ -174,33 +177,45 @@ fn main() {
 
     validate();
 
-    struct Batch { size: usize, label: &'static str, weight: f16 }
+    // Batch sizes spanning realistic JPEG workloads:
+    //    10       — single block (20% old weight)
+    //    250      — small thumbnail (~2 KP)
+    //    1K       — medium tile / web image (~8 KP)
+    //    5K       — large tile (~40 KP)
+    //    25K      — HD frame (~200 KP, baseline GPU crossover)
+    //    250K     — ~5 MP image (typical 5 MB JPEG, 50% weight)
+    struct Batch {
+        size: usize,
+        label: &'static str,
+        weight: f32,
+    }
     let batches = [
-        Batch { size: 10,     label: "10",     weight: f16::from_f32(0.03) },
-        Batch { size: 250,    label: "250",    weight: f16::from_f32(0.07) },
-        Batch { size: 1000,   label: "1K",     weight: f16::from_f32(0.10) },
-        Batch { size: 5000,   label: "5K",     weight: f16::from_f32(0.10) },
-        Batch { size: 25000,  label: "25K",    weight: f16::from_f32(0.20) },
-        Batch { size: 250000, label: "250K",   weight: f16::from_f32(0.50) },
+        Batch { size: 10,     label: "10",     weight: 0.03 },
+        Batch { size: 250,    label: "250",    weight: 0.07 },
+        Batch { size: 1000,   label: "1K",     weight: 0.10 },
+        Batch { size: 5000,   label: "5K",     weight: 0.10 },
+        Batch { size: 25000,  label: "25K",    weight: 0.20 },
+        Batch { size: 250000, label: "250K",   weight: 0.50 },
     ];
 
     println!("\nBenchmark (max {} iters/round, adaptive):", max_iters);
     println!("  {:>10} {:>7} {:>11} {:>7}", "Batch", "Blocks", "ns/block", "Weight");
     println!("  ---------- ------- ----------- -------");
 
-    let mut total = f16::ZERO;
-    let mut total_weight = f16::ZERO;
+    let mut total: f32 = 0.0;
+    let mut total_weight: f32 = 0.0;
 
     for batch in &batches {
         let iters = adaptive_iters(batch.size, max_iters);
         let mut blocks = create_blocks(batch.size);
         let ns = benchmark(&mut blocks, iters, batch.label);
-        println!("  {:>10} {:>7} {:>9.3} {:>6.0}%", batch.label, batch.size, ns, batch.weight.to_f64() * 100.0);
-        total += f16::from_f64(ns) * batch.weight;
-        total_weight += batch.weight;
+        println!("  {:>10} {:>7} {:>9.3} {:>6.0}%", batch.label, batch.size, ns, batch.weight * 100.0);
+        total += ns as f32 * batch.weight;
     }
 
+    assert!((total_weight - 1.0).abs() < 0.001, "weights must sum to 1.0");
+
     let score_path = args.get(2).cloned().unwrap_or_else(|| "fitness.score".to_string());
-    fs::write(&score_path, format!("{:.3}", total.to_f64())).unwrap();
-    println!("\nFitness (weighted avg): {:.3} ns/block -> {}", total.to_f64(), score_path);
+    fs::write(&score_path, format!("{:.3}", total)).unwrap();
+    println!("\nFitness (weighted avg): {:.3} ns/block -> {}", total, score_path);
 }
