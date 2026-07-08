@@ -28,7 +28,7 @@ base_code/                       # Seed code for each generation (winner from pr
 generations/gen_N/child_X/       # Per-attempt isolated sandbox (in .gitignore)
   .opencode/agents/dct-evolver.md  # Mutated agent genome
   src/jpeg_engine/                 # Child's working copy of the engine
-  fitness.score                    # Median ms/iter (lower wins)
+  fitness.score                    # Weighted median ns/block (lower wins)
 
 logs/
   current_gen.json                # Generation + attempt counter (resumable)

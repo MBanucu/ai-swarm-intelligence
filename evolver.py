@@ -327,7 +327,7 @@ class ChildProcess:
                 f.write("999.9")
             return False
 
-        print(f"  [Attempt {self.attempt}] SURVIVED — Score: {score:.6f}ms/iter")
+        print(f"  [Attempt {self.attempt}] SURVIVED — Score: {score:.3f}ns/block")
         self.score = score
         return True
 
@@ -453,12 +453,12 @@ def main():
                             pass
 
     if prev_best is not None:
-        print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.6f}ms/iter")
+        print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.3f}ns/block")
 
     print("[swarm] Running baseline benchmark on parent code...")
     baseline = _run_baseline()
     if baseline is not None:
-        print(f"[swarm] Baseline: {baseline:.6f}ms/iter")
+        print(f"[swarm] Baseline: {baseline:.3f}ns/block")
         if prev_best is None:
             prev_best = baseline
         elif baseline < prev_best:
@@ -517,12 +517,12 @@ def main():
                 _save_state(gen, attempt + 1)
                 _log_attempt(gen, attempt, child.score, "best")
                 print()
-                print(f">>> NEW BEST on attempt {attempt}: {best_score:.6f}ms/iter")
+                print(f">>> NEW BEST on attempt {attempt}: {best_score:.3f}ns/block")
             else:
                 _save_state(gen, attempt + 1)
                 _log_attempt(gen, attempt, child.score, "survived")
                 print()
-                print(f"    Survived on attempt {attempt}: {child.score:.6f}ms/iter (best: {best_score:.6f})")
+                print(f"    Survived on attempt {attempt}: {child.score:.3f}ns/block (best: {best_score:.3f})")
         else:
             failure = _collect_failure(child)
             sibling_failures.append(failure)
@@ -542,7 +542,7 @@ def main():
         sys.exit(1)
 
     print()
-    print(f">>> WINNER: Attempt {winner_attempt} — {best_score:.6f}ms/iter")
+    print(f">>> WINNER: Attempt {winner_attempt} — {best_score:.3f}ns/block")
 
     if prev_best is not None and best_score >= prev_best:
         print()
@@ -594,7 +594,7 @@ def main():
             [
                 "git", "-C", ROOT_DIR, "commit", "-m",
                 f"evolution(gen-{gen}): winner attempt-{winner_attempt}"
-                f" at {best_score:.6f}ms/iter",
+                f" at {best_score:.3f}ns/block",
             ],
             check=False,
         )
@@ -620,10 +620,10 @@ def main():
                         "gh", "pr", "create",
                         "--head", branch,
                         "--title",
-                        f"Evolution Gen {gen} Winner — {best_score:.6f}ms/iter",
+                        f"Evolution Gen {gen} Winner — {best_score:.3f}ns/block",
                         "--body",
                         f"Attempt {winner_attempt} won Generation {gen}"
-                        f" with {best_score:.6f}ms/iter.",
+                        f" with {best_score:.3f}ns/block.",
                         "--base", "main",
                     ],
                     check=False,
