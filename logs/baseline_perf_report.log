@@ -4,30 +4,21 @@
 # Total Lost Samples: 0
 #
 # Samples: 2K of event 'cpu/cycles/Pu'
-# Event count (approx.): 57646392573
+# Event count (approx.): 50787385247
 #
-# Overhead  Command  Shared Object         Symbol                                                                                                                          
-# ........  .......  ....................  ................................................................................................................................
+# Overhead  Command  Shared Object     Symbol                                                                                                                                                                                                                                              
+# ........  .......  ................  ....................................................................................................................................................................................................................................................
 #
-    82.16%  bench    bench                 [.] jpeg_engine::idct::idct_2d
+    91.69%  bench    bench             [.] jpeg_engine::idct::idct_2d
             |          
-             --82.11%--jpeg_engine::idct::idct_2d
+             --91.55%--jpeg_engine::idct::idct_2d
                        |          
-                       |--63.90%--rayon::iter::plumbing::bridge_producer_consumer::helper
+                       |--71.09%--rayon::iter::plumbing::bridge_producer_consumer::helper
                        |          
-                        --17.77%--idct_2d_batch
-
-     9.40%  bench    libc.so.6             [.] __memmove_avx_unaligned_erms
-            |
-            ---__memmove_avx_unaligned_erms
-               NEO::CommandQueueHw<NEO::Gen9Family>::enqueueWriteBuffer(NEO::Buffer*, unsigned int, unsigned long, unsigned long, void const*, NEO::GraphicsAllocation*, unsigned int, _cl_event* const*, _cl_event**)
-               clEnqueueWriteBuffer
-               clEnqueueWriteBuffer
-               ocl::standard::buffer::BufferWriteCmd<T>::enq::{{closure}}
-               add_history
+                        --20.00%--jpeg_engine::idct::batch_idct_2d
 
 
 
 #
-# (Tip: Treat branches as callchains: perf record -b ... ; perf report --branch-history)
+# (Tip: Create an archive with symtabs to analyse on other machine: perf archive)
 #
