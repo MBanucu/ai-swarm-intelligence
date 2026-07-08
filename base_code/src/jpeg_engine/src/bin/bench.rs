@@ -148,22 +148,23 @@ fn adaptive_iters(batch_size: usize, max_iters: usize) -> usize {
 }
 
 fn benchmark(blocks: &mut Vec<[f16; 64]>, iter_count: usize, label: &str) -> f64 {
-    idct_2d_batch(blocks.as_mut_ptr() as *mut u16, blocks.len() as u32);
+    let batch_size = blocks.len();
+    idct_2d_batch(blocks.as_mut_ptr() as *mut u16, batch_size as u32);
 
     let rounds = 10;
     let mut samples = Vec::with_capacity(rounds);
     for _ in 0..rounds {
         let start = Instant::now();
         for _ in 0..iter_count {
-            idct_2d_batch(blocks.as_mut_ptr() as *mut u16, blocks.len() as u32);
+            idct_2d_batch(blocks.as_mut_ptr() as *mut u16, batch_size as u32);
         }
         let elapsed = start.elapsed().as_secs_f64();
-        samples.push((elapsed / iter_count as f64) * 1000.0);
+        samples.push(elapsed / iter_count as f64 / batch_size as f64 * 1_000_000_000.0);
     }
 
     samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let median = samples[samples.len() / 2];
-    println!("  {:<10} {:>7} blocks  {:>9.6} ms/iter", label, blocks.len(), median);
+    println!("  {:<10} {:>7} blocks  {:>9.3} ns/block", label, batch_size, median);
     median
 }
 
@@ -184,7 +185,7 @@ fn main() {
     ];
 
     println!("\nBenchmark (max {} iters/round, adaptive):", max_iters);
-    println!("  {:>10} {:>7} {:>11} {:>7}", "Batch", "Blocks", "ms/iter", "Weight");
+    println!("  {:>10} {:>7} {:>11} {:>7}", "Batch", "Blocks", "ns/block", "Weight");
     println!("  ---------- ------- ----------- -------");
 
     let mut total = f16::ZERO;
@@ -193,13 +194,13 @@ fn main() {
     for batch in &batches {
         let iters = adaptive_iters(batch.size, max_iters);
         let mut blocks = create_blocks(batch.size);
-        let ms = benchmark(&mut blocks, iters, batch.label);
-        println!("  {:>10} {:>7} {:>9.6} {:>6.0}%", batch.label, batch.size, ms, batch.weight.to_f64() * 100.0);
-        total += f16::from_f64(ms) * batch.weight;
+        let ns = benchmark(&mut blocks, iters, batch.label);
+        println!("  {:>10} {:>7} {:>9.3} {:>6.0}%", batch.label, batch.size, ns, batch.weight.to_f64() * 100.0);
+        total += f16::from_f64(ns) * batch.weight;
         total_weight += batch.weight;
     }
 
     let score_path = args.get(2).cloned().unwrap_or_else(|| "fitness.score".to_string());
-    fs::write(&score_path, format!("{:.6}", total.to_f64())).unwrap();
-    println!("\nFitness (weighted avg): {:.6} ms/iter -> {}", total.to_f64(), score_path);
+    fs::write(&score_path, format!("{:.3}", total.to_f64())).unwrap();
+    println!("\nFitness (weighted avg): {:.3} ns/block -> {}", total.to_f64(), score_path);
 }

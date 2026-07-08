@@ -5,7 +5,7 @@ Parallel evolutionary optimization of a DCT engine using OpenCode agents that mu
 ## Quick start
 
 ```bash
-bash evolver.sh
+nix develop --command python3 evolver.py
 ```
 
 Runs one generation: mutates agent genomes, spawns parallel child sandboxes, evaluates fitness, selects winner, commits to git, and opens a GitHub PR.
