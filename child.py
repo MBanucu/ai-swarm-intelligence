@@ -14,7 +14,7 @@ from config import (
 )
 
 _PERF_EVENTS = "instructions,cycles,cache-misses,branch-misses,task-clock"
-_STALL_TIMEOUT = 60
+_STALL_TIMEOUT = 300
 
 
 def _perf_available():
