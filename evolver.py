@@ -8,6 +8,9 @@ import subprocess
 
 MAX_RETRIES = 10
 
+PRIMARY_MODEL = "opencode/deepseek-v4-flash-free"
+FALLBACK_MODEL = "opencode-go/deepseek-v4-flash"
+
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 GEN_FILE = os.path.join(ROOT_DIR, "logs", "current_gen.json")
 BASE_CODE = os.path.join(ROOT_DIR, "base_code")
@@ -15,6 +18,19 @@ ARCHIVE_DIR = os.path.join(ROOT_DIR, "logs", "archived_agents")
 BASE_TEMPLATE = os.path.join(ROOT_DIR, ".opencode", "agents", "base_template.md")
 BENCHMARK_HISTORY = os.path.join(ROOT_DIR, "logs", "benchmark_history.json")
 IMPROVEMENT_DIR = os.path.join(ROOT_DIR, "improvement_suggestions")
+
+
+def _run_opencode(args, log_path):
+    """Run opencode with primary model, fallback on failure."""
+    for model in (PRIMARY_MODEL, FALLBACK_MODEL):
+        cmd = ["unbuffer", "opencode", "--model", model] + args
+        with open(log_path, "w") as f:
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+        if result.returncode == 0:
+            return True
+        print(f"  [fallback] model={model} failed (rc={result.returncode}), retrying...",
+              flush=True)
+    return False
 
 
 class ChildProcess:
@@ -146,15 +162,9 @@ class ChildProcess:
             f"Output ONLY the raw markdown content for the analysis file."
         )
 
-        cmd = [
-            "unbuffer", "opencode",
-            "--model", "opencode-go/deepseek-v4-flash",
-            "run", "--share", "--thinking", prompt,
-        ]
         log_path = os.path.join(self.dir, "analysis.log")
-        with open(log_path, "w") as log:
-            result = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT)
-        if result.returncode != 0 or not os.path.exists(self.analysis_path):
+        ok = _run_opencode(["run", "--share", "--thinking", prompt], log_path)
+        if not ok or not os.path.exists(self.analysis_path):
             print(f"[Attempt {self.attempt}] Analysis step failed — continuing without it",
                   flush=True)
             return
@@ -197,14 +207,11 @@ class ChildProcess:
             f"- Preserve the --- YAML delimiter syntax exactly.\n\n"
             f"Output ONLY the raw markdown content."
         )
-        cmd = [
-            "unbuffer", "opencode",
-            "--model", "opencode-go/deepseek-v4-flash",
-            "run", "--share", "--thinking", prompt,
-        ]
-        with open(os.path.join(self.dir, "mutation.log"), "w") as f:
-            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-        if result.returncode != 0:
+        ok = _run_opencode(
+            ["run", "--share", "--thinking", prompt],
+            os.path.join(self.dir, "mutation.log"),
+        )
+        if not ok:
             return False
         if not os.path.exists(self.mutated_agent):
             return False
@@ -267,16 +274,12 @@ class ChildProcess:
                         lines = f[key].strip().split("\n")[-3:]
                         prompt += f"  {chr(10).join('  ' + l for l in lines)}\n"
             prompt += "\nAnalyze these failures and choose a DIFFERENT approach."
-        cmd = [
-            "unbuffer", "opencode",
-            "--model", "opencode-go/deepseek-v4-flash",
-            "--agent", "dct-evolver",
-            "--dir", self.dir,
-            "run", "--share", "--thinking", prompt,
-        ]
-        with open(os.path.join(self.dir, "lifecycle.log"), "w") as f:
-            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-        return result.returncode == 0
+        ok = _run_opencode(
+            ["--agent", "dct-evolver", "--dir", self.dir,
+             "run", "--share", "--thinking", prompt],
+            os.path.join(self.dir, "lifecycle.log"),
+        )
+        return ok
 
     def _benchmark(self):
         engine_dir = os.path.join(self.dir, "src", "jpeg_engine")
@@ -348,7 +351,7 @@ def _run_baseline():
     for line in reversed(output_lines):
         try:
             data = json.loads(line.strip())
-            if "fitness" in data:
+            if isinstance(data, dict) and "fitness" in data:
                 return float(data["fitness"])
         except (json.JSONDecodeError, ValueError):
             pass
