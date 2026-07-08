@@ -1,0 +1,34 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cpu/cycles/Pu'
+# Event count (approx.): 57674742461
+#
+# Overhead  Command  Shared Object         Symbol                                                                                  
+# ........  .......  ....................  ........................................................................................
+#
+    82.58%  bench    bench                 [.] jpeg_engine::idct::idct_2d
+            |          
+             --82.41%--jpeg_engine::idct::idct_2d
+                       |          
+                       |--64.30%--rayon::iter::plumbing::bridge_producer_consumer::helper
+                       |          
+                        --17.53%--idct_2d_batch
+
+    10.36%  bench    libc.so.6             [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               |          
+                --10.30%--NEO::CommandQueueHw<NEO::Gen9Family>::enqueueWriteBuffer(NEO::Buffer*, unsigned int, unsigned long, unsigned long, void const*, NEO::GraphicsAllocation*, unsigned int, _cl_event* const*, _cl_event**)
+                          clEnqueueWriteBuffer
+                          clEnqueueWriteBuffer
+                          ocl::standard::buffer::BufferWriteCmd<T>::enq::{{closure}}
+                          add_history
+
+
+
+#
+# (Tip: To trace calls using Processor Trace use perf record -e intel_pt// ... ; perf script --call-trace. Then use perf script --time A-B --insn-trace to look at region of interest.)
+#

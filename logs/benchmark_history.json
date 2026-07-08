@@ -68,5 +68,12 @@
     "score": 56.995,
     "status": "regression",
     "timestamp": "2026-07-08T16:55:06+02:00"
+  },
+  {
+    "gen": 2,
+    "attempt": 10,
+    "score": 72.254,
+    "status": "regression",
+    "timestamp": "2026-07-08T17:20:00+02:00"
   }
 ]

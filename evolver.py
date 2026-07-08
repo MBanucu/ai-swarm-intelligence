@@ -224,6 +224,36 @@ def main():
     failure_dir = os.path.join(gen_dir, "failures")
     os.makedirs(failure_dir, exist_ok=True)
 
+    if os.path.exists(BENCHMARK_HISTORY):
+        with open(BENCHMARK_HISTORY) as f:
+            history = json.load(f)
+        for entry in history:
+            if entry.get("gen") == gen and entry.get("status") == "best":
+                best_score = float(entry["score"])
+                winner_attempt = entry["attempt"]
+                winner_dir = os.path.join(gen_dir, f"child_{winner_attempt}")
+                if os.path.isdir(winner_dir):
+                    print(f"[swarm] Restored previous best: attempt {winner_attempt}"
+                          f" = {best_score:.3f}ns/block")
+                else:
+                    winner_dir = None
+                break
+
+    for fn in sorted(os.listdir(failure_dir)):
+        if fn.startswith("attempt_") and fn.endswith(".txt"):
+            try:
+                a = int(fn.replace("attempt_", "").replace(".txt", ""))
+            except ValueError:
+                continue
+            if a < start_attempt:
+                with open(os.path.join(failure_dir, fn)) as f:
+                    first_line = f.readline().strip()
+                sibling_failures.append({
+                    "attempt": a,
+                    "reason": first_line.split(" - ", 1)[1]
+                    if " - " in first_line else "unknown",
+                })
+
     for attempt in range(start_attempt, MAX_RETRIES + 1):
         print()
         print("=" * 70)
