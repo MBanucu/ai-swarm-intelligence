@@ -211,6 +211,7 @@ fn main() {
         let ns = benchmark(&mut blocks, iters, batch.label);
         println!("  {:>10} {:>7} {:>9.3} {:>6.0}%", batch.label, batch.size, ns, batch.weight * 100.0);
         total += ns as f32 * batch.weight;
+        total_weight += batch.weight;
     }
 
     assert!((total_weight - 1.0).abs() < 0.001, "weights must sum to 1.0");
