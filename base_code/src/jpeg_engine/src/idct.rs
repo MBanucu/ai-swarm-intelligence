@@ -13,20 +13,22 @@
 // (vs 64 mul + 56 add for dense 8×8 mat‑vec).
 // ──────────────────────────────────────────────────────
 
+use half::f16;
+
 /// Even‑column 4×4 sub‑matrix of the IDCT (columns 0,2,4,6).
-const E: [[f32; 4]; 4] = [
-    [0.35355339059327376, 0.46193976625564337, 0.35355339059327376, 0.19134171618254492],
-    [0.35355339059327376, 0.19134171618254492,-0.35355339059327376,-0.46193976625564337],
-    [0.35355339059327376,-0.19134171618254492,-0.35355339059327376, 0.46193976625564337],
-    [0.35355339059327376,-0.46193976625564337, 0.35355339059327376,-0.19134171618254492],
+const E: [[f16; 4]; 4] = [
+    [f16::from_f32_const(0.35355339), f16::from_f32_const(0.46193975), f16::from_f32_const(0.35355339), f16::from_f32_const(0.19134171)],
+    [f16::from_f32_const(0.35355339), f16::from_f32_const(0.19134171), f16::from_f32_const(-0.35355339), f16::from_f32_const(-0.46193975)],
+    [f16::from_f32_const(0.35355339), f16::from_f32_const(-0.19134171), f16::from_f32_const(-0.35355339), f16::from_f32_const(0.46193975)],
+    [f16::from_f32_const(0.35355339), f16::from_f32_const(-0.46193975), f16::from_f32_const(0.35355339), f16::from_f32_const(-0.19134171)],
 ];
 
 /// Odd‑column 4×4 sub‑matrix (columns 1,3,5,7).
-const O: [[f32; 4]; 4] = [
-    [0.49039264020161522, 0.41573480615127262, 0.27778511650980114, 0.09754516100806417],
-    [0.41573480615127262,-0.09754516100806417,-0.49039264020161522,-0.27778511650980114],
-    [0.27778511650980114,-0.49039264020161522, 0.09754516100806417, 0.41573480615127262],
-    [0.09754516100806417,-0.27778511650980114, 0.41573480615127262,-0.49039264020161522],
+const O: [[f16; 4]; 4] = [
+    [f16::from_f32_const(0.49039263), f16::from_f32_const(0.41573480), f16::from_f32_const(0.27778512), f16::from_f32_const(0.09754516)],
+    [f16::from_f32_const(0.41573480), f16::from_f32_const(-0.09754516), f16::from_f32_const(-0.49039263), f16::from_f32_const(-0.27778512)],
+    [f16::from_f32_const(0.27778512), f16::from_f32_const(-0.49039263), f16::from_f32_const(0.09754516), f16::from_f32_const(0.41573480)],
+    [f16::from_f32_const(0.09754516), f16::from_f32_const(-0.27778512), f16::from_f32_const(0.41573480), f16::from_f32_const(-0.49039263)],
 ];
 
 /// 1‑D IDCT — even/odd decomposition.
@@ -37,7 +39,7 @@ const O: [[f32; 4]; 4] = [
 /// optimisations like loop unrolling, register renaming, and instruction
 /// scheduling.
 #[inline(always)]
-fn idct_1d(src: &[f32; 8]) -> [f32; 8] {
+fn idct_1d(src: &[f16; 8]) -> [f16; 8] {
     let s0 = src[0]; let s1 = src[1]; let s2 = src[2]; let s3 = src[3];
     let s4 = src[4]; let s5 = src[5]; let s6 = src[6]; let s7 = src[7];
 
@@ -64,12 +66,10 @@ fn idct_1d(src: &[f32; 8]) -> [f32; 8] {
 // 2‑D IDCT — separable row‑column implementation
 // ──────────────────────────────────────────────────────
 
-/// 32‑byte aligned buffer — AVX loads/stores require 32‑byte alignment
-/// for best performance (`vmovapd` / `vmovaps`).  Even on CPUs that handle
-/// unaligned access efficiently, aligned loads avoid the µop penalty in
-/// certain micro‑architectures (Sandy/Ivy Bridge, early Haswell).
-#[repr(align(32))]
-struct AlignedF64<const N: usize>([f32; N]);
+/// 16‑byte aligned buffer — f16 is 2 bytes, alignment kept at 16 bytes
+/// for best performance on wide loads.
+#[repr(align(16))]
+struct AlignedF16<const N: usize>([f16; N]);
 
 /// Inverse DCT — separable row‑column implementation.
 ///
@@ -83,11 +83,9 @@ struct AlignedF64<const N: usize>([f32; N]);
 ///
 /// The column pass still writes to `block` in the standard row‑major
 /// layout (same as before).
-pub fn idct_2d(block: &mut [f32; 64]) {
-    // 32‑byte aligned temporary buffer for transposed row results.
-    // Alignment guarantees AVX loads can use `vmovapd` instead of `vmovupd`,
-    // which avoids a ~50% penalty on some micro‑architectures.
-    let mut tmp = AlignedF64::<64>([0.0f32; 64]);
+pub fn idct_2d(block: &mut [f16; 64]) {
+    // 16‑byte aligned temporary buffer for transposed row results.
+    let mut tmp = AlignedF16::<64>([f16::ZERO; 64]);
     let tmp = &mut tmp.0;
 
     // ── Pass 1: IDCT on rows, store TRANSPOSED into tmp ──
@@ -110,7 +108,7 @@ pub fn idct_2d(block: &mut [f32; 64]) {
     }
 
     // ── Pass 2: IDCT on columns — unit‑stride reads from tmp ──
-    // tmp[x*8 + u] = G[u][x], so we read 8 consecutive f32s
+    // tmp[x*8 + u] = G[u][x], so we read 8 consecutive f16s
     for x in 0..8 {
         let off = x << 3;  // x * 8
         let col = [
@@ -131,7 +129,7 @@ pub fn idct_2d(block: &mut [f32; 64]) {
 }
 
 /// Multi‑block batched IDCT — processes blocks with optional parallelism.
-pub fn batch_idct_2d(blocks: &mut [[f32; 64]]) {
+pub fn batch_idct_2d(blocks: &mut [[f16; 64]]) {
     let n = blocks.len();
     if n == 0 {
         return;
@@ -161,20 +159,20 @@ mod tests {
 
     #[test]
     fn test_idct_zero_block() {
-        let mut block = [0.0f32; 64];
+        let mut block = [f16::ZERO; 64];
         idct_2d(&mut block);
         for &val in &block {
-            assert!(val.abs() < 0.001, "expected near-zero, got {}", val);
+            assert!(val.to_f32().abs() < 0.001, "expected near-zero, got {}", val);
         }
     }
 
     #[test]
     fn test_idct_dc_only() {
-        let mut block = [0.0f32; 64];
-        block[0] = 8.0;
+        let mut block = [f16::ZERO; 64];
+        block[0] = f16::from_f32(8.0);
         idct_2d(&mut block);
         for &val in &block {
-            assert!((val - 1.0).abs() < 0.001, "DC-only IDCT: expected 1.0, got {}", val);
+            assert!((val.to_f32() - 1.0).abs() < 0.001, "DC-only IDCT: expected 1.0, got {}", val);
         }
     }
 }

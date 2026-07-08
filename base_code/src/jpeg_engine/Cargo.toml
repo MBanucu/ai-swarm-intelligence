@@ -16,6 +16,7 @@ opencl = ["ocl"]
 rayon = ["dep:rayon"]
 
 [dependencies]
+half = { version = "2", features = ["std"] }
 rand = "0.8"
 rayon = { version = "1.8", optional = true }
 
