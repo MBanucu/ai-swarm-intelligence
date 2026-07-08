@@ -30,7 +30,7 @@ def _run_baseline():
     engine_dir = os.path.join(BASE_CODE, "src", "jpeg_engine")
     perf_log = os.path.join(ROOT_DIR, "logs", "baseline_perf.log")
 
-    bench_args = ["cargo", "run", "--release", "--features", "gpu",
+    bench_args = ["cargo", "run", "--release",
                    "--bin", "bench", "--", "5000", "/dev/stdout"]
     if _perf_available():
         cmd = ["perf", "stat", "-e", _PERF_EVENTS, "-o", perf_log, "--"] + bench_args

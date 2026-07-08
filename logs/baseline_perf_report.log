@@ -4,543 +4,71 @@
 # Total Lost Samples: 0
 #
 # Samples: 2K of event 'cpu/cycles/Pu'
-# Event count (approx.): 50884345171
+# Event count (approx.): 49892464658
 #
 # Children      Self  Command  Shared Object         Symbol                                                                                                                                                                                                           
 # ........  ........  .......  ....................  .................................................................................................................................................................................................................
 #
-    94.44%    92.71%  bench    bench                 [.] jpeg_engine::idct::idct_2d
+    93.52%    92.45%  bench    bench                 [.] jpeg_engine::idct::idct_2d
             |          
-             --1.74%--jpeg_engine::idct::idct_2d
+             --1.08%--jpeg_engine::idct::idct_2d
 
-    74.39%     0.79%  bench    bench                 [.] rayon::iter::plumbing::bridge_producer_consumer::helper
+    73.35%     0.71%  bench    bench                 [.] rayon::iter::plumbing::bridge_producer_consumer::helper
             |          
-             --73.60%--rayon::iter::plumbing::bridge_producer_consumer::helper
-                       jpeg_engine::idct::idct_2d
-
-    20.98%     0.33%  bench    bench                 [.] jpeg_engine::idct::batch_idct_2d
-            |          
-             --20.65%--jpeg_engine::idct::batch_idct_2d
+             --72.67%--rayon::iter::plumbing::bridge_producer_consumer::helper
                        |          
-                       |--19.80%--jpeg_engine::idct::idct_2d
-                       |          
-                        --0.82%--std::thread::functions::available_parallelism
+                        --72.60%--jpeg_engine::idct::idct_2d
 
-     2.20%     0.67%  bench    bench                 [.] bench::main
+    21.17%     0.28%  bench    bench                 [.] jpeg_engine::idct::batch_idct_2d
+            |          
+             --20.89%--jpeg_engine::idct::batch_idct_2d
+                       |          
+                       |--20.07%--jpeg_engine::idct::idct_2d
+                       |          
+                        --0.71%--std::thread::functions::available_parallelism
+
+     2.20%     0.74%  bench    bench                 [.] bench::main
             |
             ---bench::main
                |          
-                --0.86%--bench::reference_idct_2d
+                --0.75%--bench::reference_idct_2d
 
-     1.05%     0.95%  bench    [unknown]             [.] 0000000000000000
      0.87%     0.00%  bench    [unknown]             [.] 0xe800000110bf8b48
             |
             ---0xe800000110bf8b48
                0x1c8
                |          
-                --0.85%--jpeg_engine::idct::batch_idct_2d
+                --0.77%--jpeg_engine::idct::batch_idct_2d
                           |          
-                           --0.82%--std::thread::functions::available_parallelism
+                           --0.60%--std::thread::functions::available_parallelism
 
      0.87%     0.00%  bench    [unknown]             [.] 0x00000000000001c8
             |
             ---0x1c8
                |          
-                --0.85%--jpeg_engine::idct::batch_idct_2d
+                --0.77%--jpeg_engine::idct::batch_idct_2d
                           |          
-                           --0.82%--std::thread::functions::available_parallelism
+                           --0.60%--std::thread::functions::available_parallelism
 
-     0.86%     0.76%  bench    bench                 [.] bench::reference_idct_2d
-            |          
-             --0.76%--bench::main
-                       bench::reference_idct_2d
-
-     0.82%     0.06%  bench    bench                 [.] std::thread::functions::available_parallelism
-            |          
-             --0.76%--std::thread::functions::available_parallelism
-
-     0.54%     0.54%  bench    libm.so.6             [.] __cosf_fma
+     0.81%     0.81%  bench    bench                 [.] bench::reference_idct_2d
             |
             ---bench::main
+               |          
+                --0.75%--bench::reference_idct_2d
 
+     0.75%     0.65%  bench    bench                 [.] rayon_core::registry::WorkerThread::wait_until_cold
+     0.75%     0.69%  bench    [unknown]             [.] 0000000000000000
+     0.71%     0.03%  bench    bench                 [.] std::thread::functions::available_parallelism
+            |          
+             --0.68%--std::thread::functions::available_parallelism
+
+     0.56%     0.00%  bench    [unknown]             [k] 0x00007fffffff7ea8
+            |
+            ---0x7fffffff7ea8
+
+     0.50%     0.48%  bench    bench                 [.] crossbeam_epoch::default::with_handle
 
 
 #
-# (Tip: For parallelism histogram, try: perf report --hierarchy --sort latency,parallelism,comm,symbol)
+# (Tip: Skip collecting build-id when recording: perf record -B)
 #
-
-
-# ========== PER-FUNCTION ANNOTATION ==========
-
-## jpeg_engine::idct::idct_2d
-
- Percent |	Source code & Disassembly of bench for cpu/cycles/Pu (2234 samples, percent: local period)
-----------------------------------------------------------------------------------------------------------
-         :
-         :
-         :
-         : 3     Disassembly of section .text:
-         :
-         : 5     000000000003abf0 <jpeg_engine::idct::idct_2d>:
-    0.00 :   3abf0:  push   %rbp
-    0.00 :   3abf1:  mov    %rsp,%rbp
-    0.23 :   3abf4:  and    $0xffffffffffffffe0,%rsp
-    0.00 :   3abf8:  sub    $0x180,%rsp
-    0.00 :   3abff:  vxorps %xmm0,%xmm0,%xmm0
-    0.12 :   3ac03:  vmovaps %ymm0,0x120(%rsp)
-    0.81 :   3ac0c:  vmovaps %ymm0,0x100(%rsp)
-    0.05 :   3ac15:  vmovaps %ymm0,0xe0(%rsp)
-    0.03 :   3ac1e:  vmovaps %ymm0,0xc0(%rsp)
-    0.05 :   3ac27:  vmovaps %ymm0,0xa0(%rsp)
-    0.22 :   3ac30:  vmovaps %ymm0,0x80(%rsp)
-    0.11 :   3ac39:  vmovaps %ymm0,0x60(%rsp)
-    0.11 :   3ac3f:  vmovaps %ymm0,0x40(%rsp)
-    2.26 :   3ac45:  vmovups 0x60(%rdi),%ymm8
-    0.88 :   3ac4a:  vmovups 0x40(%rdi),%ymm2
-    0.16 :   3ac4f:  vmovups 0x20(%rdi),%ymm3
-    0.54 :   3ac54:  vmovups 0xa0(%rdi),%xmm1
-    0.18 :   3ac5c:  vmovups 0x80(%rdi),%xmm9
-    1.98 :   3ac64:  vunpcklps %xmm1,%xmm9,%xmm0
-    0.58 :   3ac68:  vinsertf128 $0x1,%xmm0,%ymm0,%ymm0
-    0.43 :   3ac6e:  vmovups 0xc0(%rdi),%xmm11
-    0.30 :   3ac76:  vmovups 0xe0(%rdi),%xmm12
-    0.59 :   3ac7e:  vmovlhps %xmm11,%xmm12,%xmm5
-    0.56 :   3ac83:  vshufps $0x24,%xmm5,%xmm5,%xmm5
-    0.95 :   3ac88:  vinsertf128 $0x1,%xmm5,%ymm0,%ymm5
-    1.25 :   3ac8e:  vblendps $0xc0,%ymm5,%ymm0,%ymm5
-    0.05 :   3ac94:  vmovups (%rdi),%xmm10
-    0.00 :   3ac98:  vmovups 0x20(%rdi),%xmm13
-    0.00 :   3ac9d:  vmovups 0x40(%rdi),%xmm15
-    0.40 :   3aca2:  vmovups 0x60(%rdi),%xmm0
-    0.12 :   3aca7:  vmovlhps %xmm15,%xmm0,%xmm6
-    0.00 :   3acac:  vunpcklps %xmm13,%xmm10,%xmm7
-    0.31 :   3acb1:  vshufps $0x24,%xmm6,%xmm7,%xmm6
-    0.32 :   3acb6:  vblendps $0xf,%ymm6,%ymm5,%ymm4
-    0.06 :   3acbc:  vmovaps %ymm4,(%rsp)
-    0.00 :   3acc1:  vunpcklps %xmm12,%xmm11,%xmm5
-    0.10 :   3acc6:  vinsertf128 $0x1,%xmm5,%ymm0,%ymm5
-    0.16 :   3accc:  vinsertps $0x4c,%xmm9,%xmm1,%xmm6
-    0.18 :   3acd2:  vinsertf128 $0x1,%xmm6,%ymm0,%ymm6
-    1.21 :   3acd8:  vblendps $0xc0,%ymm5,%ymm6,%ymm5
-    0.00 :   3acde:  vunpcklps %xmm0,%xmm15,%xmm6
-    0.06 :   3ace2:  vinsertps $0x4c,%xmm10,%xmm13,%xmm7
-    0.22 :   3ace8:  vblendps $0x3,%xmm7,%xmm6,%xmm6
-    0.31 :   3acee:  vblendps $0xf,%ymm6,%ymm5,%ymm4
-    0.00 :   3acf4:  vmovaps %ymm4,0x20(%rsp)
-    0.00 :   3acfa:  vinsertps $0xb3,%xmm12,%xmm11,%xmm5
-    0.24 :   3ad00:  vinsertf128 $0x1,%xmm5,%ymm0,%ymm5
-    0.28 :   3ad06:  vunpckhps %xmm1,%xmm9,%xmm6
-    0.27 :   3ad0a:  vinsertf128 $0x1,%xmm6,%ymm0,%ymm6
-    0.72 :   3ad10:  vblendps $0xc0,%ymm5,%ymm6,%ymm6
-    0.06 :   3ad16:  vinsertps $0xb3,%xmm0,%xmm15,%xmm5
-    0.00 :   3ad1c:  vunpckhps %xmm13,%xmm10,%xmm7
-    0.04 :   3ad21:  vblendps $0x3,%xmm7,%xmm5,%xmm7
-    0.28 :   3ad27:  vmovups (%rdi),%ymm5
-    0.19 :   3ad2b:  vblendps $0xf,%ymm7,%ymm6,%ymm7
-    0.00 :   3ad31:  vmovups 0xa0(%rdi),%ymm6
-    0.30 :   3ad39:  vunpckhps %xmm12,%xmm11,%xmm14
-    0.12 :   3ad3e:  vmovups 0x80(%rdi),%ymm11
-    0.28 :   3ad46:  vshufps $0x33,%xmm9,%xmm1,%xmm1
-    0.00 :   3ad4c:  vmovups 0xc0(%rdi),%ymm12
-    0.15 :   3ad54:  vinsertf128 $0x1,%xmm14,%ymm0,%ymm9
-    0.11 :   3ad5a:  vshufps $0xe2,%xmm1,%xmm1,%xmm1
-    0.35 :   3ad5f:  vinsertf128 $0x1,%xmm1,%ymm0,%ymm1
-    1.63 :   3ad65:  vblendps $0xc0,%ymm9,%ymm1,%ymm1
-    2.43 :   3ad6b:  vmovups 0xe0(%rdi),%ymm14
-    0.00 :   3ad73:  vunpckhps %xmm0,%xmm15,%xmm0
-    0.07 :   3ad77:  vshufps $0x33,%xmm10,%xmm13,%xmm9
-    0.54 :   3ad7d:  vshufps $0xe2,%xmm0,%xmm9,%xmm0
-    0.73 :   3ad82:  vblendps $0xf,%ymm0,%ymm1,%ymm9
-    0.00 :   3ad88:  vunpcklpd %ymm12,%ymm14,%ymm0
-    0.15 :   3ad8d:  vunpcklps %ymm6,%ymm11,%ymm1
-    0.56 :   3ad91:  vshufps $0x24,%ymm0,%ymm1,%ymm0
-    0.30 :   3ad96:  vunpcklps %ymm3,%ymm5,%ymm1
-    0.83 :   3ad9a:  vextractf128 $0x1,%ymm1,%xmm1
-    0.00 :   3ada0:  vunpcklps %ymm8,%ymm2,%ymm10
-    0.28 :   3ada5:  vpermpd $0xaa,%ymm10,%ymm10
-    1.00 :   3adab:  vblendps $0x3,%xmm1,%xmm10,%xmm1
-    0.53 :   3adb1:  vblendps $0xf,%ymm1,%ymm0,%ymm4
-    0.05 :   3adb7:  vunpcklps %ymm14,%ymm12,%ymm1
-    0.00 :   3adbc:  vshufps $0x11,%ymm11,%ymm6,%ymm10
-    0.35 :   3adc2:  vshufps $0xe2,%ymm1,%ymm10,%ymm1
-    0.54 :   3adc7:  vshufps $0x11,%ymm5,%ymm3,%ymm10
-    0.26 :   3adcc:  vextractf128 $0x1,%ymm10,%xmm10
-    0.00 :   3add2:  vshufps $0x11,%ymm2,%ymm8,%ymm13
-    0.00 :   3add7:  vbroadcastsd 0x59e80(%rip),%ymm0        # 94c60 <_fini+0x1b1c>
-    0.36 :   3ade0:  vpermps %ymm13,%ymm0,%ymm13
-    0.17 :   3ade5:  vmovaps %ymm0,0x140(%rsp)
-    1.37 :   3adee:  vshufps $0xe2,%xmm13,%xmm10,%xmm10
-    1.87 :   3adf4:  vblendps $0xf,%ymm10,%ymm1,%ymm10
-    0.05 :   3adfa:  vunpckhpd %ymm12,%ymm14,%ymm1
-    0.00 :   3adff:  vunpckhps %ymm6,%ymm11,%ymm13
-    0.12 :   3ae03:  vshufps $0x24,%ymm1,%ymm13,%ymm1
-    0.47 :   3ae08:  vunpckhps %ymm3,%ymm5,%ymm13
-    0.51 :   3ae0c:  vextractf128 $0x1,%ymm13,%xmm13
-    0.00 :   3ae12:  vunpckhps %ymm8,%ymm2,%ymm15
-    0.20 :   3ae17:  vpermpd $0xaa,%ymm15,%ymm15
-    1.27 :   3ae1d:  vblendps $0x3,%xmm13,%xmm15,%xmm13
-    0.63 :   3ae23:  vblendps $0xf,%ymm13,%ymm1,%ymm1
-    0.00 :   3ae29:  vunpckhps %ymm14,%ymm12,%ymm12
-    0.00 :   3ae2e:  vshufps $0x33,%ymm11,%ymm6,%ymm6
-    0.22 :   3ae34:  vshufps $0xe2,%ymm12,%ymm6,%ymm6
-    0.61 :   3ae3a:  vshufps $0x33,%ymm5,%ymm3,%ymm3
-    0.14 :   3ae3f:  vextractf128 $0x1,%ymm3,%xmm3
-    0.00 :   3ae45:  vshufps $0x33,%ymm2,%ymm8,%ymm2
-    0.22 :   3ae4a:  vpermps %ymm2,%ymm0,%ymm2
-    1.17 :   3ae4f:  vshufps $0xe2,%xmm2,%xmm3,%xmm2
-    1.81 :   3ae54:  vblendps $0xf,%ymm2,%ymm6,%ymm11
-    0.04 :   3ae5a:  vmovaps (%rsp),%ymm0
-    0.00 :   3ae5f:  vaddps %ymm4,%ymm0,%ymm2
-    0.00 :   3ae63:  vsubps %ymm4,%ymm0,%ymm0
-    0.38 :   3ae67:  vbroadcastss 0x5924c(%rip),%ymm5        # 940bc <_fini+0xf78>
-    0.00 :   3ae70:  vmulps %ymm5,%ymm7,%ymm3
-    0.00 :   3ae74:  vbroadcastss 0x59243(%rip),%ymm6        # 940c0 <_fini+0xf7c>
-    0.00 :   3ae7d:  vmulps %ymm6,%ymm1,%ymm4
-    0.62 :   3ae81:  vaddps %ymm4,%ymm3,%ymm3
-    0.00 :   3ae85:  vmulps %ymm6,%ymm7,%ymm4
-    0.00 :   3ae89:  vmulps %ymm5,%ymm1,%ymm1
-    0.05 :   3ae8d:  vsubps %ymm1,%ymm4,%ymm1
-    0.60 :   3ae91:  vbroadcastss 0x5922a(%rip),%ymm4        # 940c4 <_fini+0xf80>
-    0.00 :   3ae9a:  vmulps %ymm4,%ymm2,%ymm2
-    0.00 :   3ae9e:  vmulps %ymm4,%ymm0,%ymm0
-    0.00 :   3aea2:  vaddps %ymm3,%ymm2,%ymm12
-    0.42 :   3aea6:  vaddps %ymm1,%ymm0,%ymm13
-    0.00 :   3aeaa:  vsubps %ymm1,%ymm0,%ymm14
-    0.06 :   3aeae:  vsubps %ymm3,%ymm2,%ymm0
-    0.04 :   3aeb2:  vbroadcastss 0x5920d(%rip),%ymm6        # 940c8 <_fini+0xf84>
-    0.41 :   3aebb:  vmovaps 0x20(%rsp),%ymm15
-    0.00 :   3aec1:  vmulps %ymm6,%ymm15,%ymm1
-    0.11 :   3aec5:  vbroadcastss 0x591fe(%rip),%ymm7        # 940cc <_fini+0xf88>
-    0.04 :   3aece:  vmulps %ymm7,%ymm9,%ymm2
-    0.50 :   3aed2:  vaddps %ymm2,%ymm1,%ymm1
-    0.00 :   3aed6:  vbroadcastss 0x591f1(%rip),%ymm8        # 940d0 <_fini+0xf8c>
-    0.05 :   3aedf:  vmulps %ymm8,%ymm10,%ymm2
-    0.16 :   3aee4:  vaddps %ymm2,%ymm1,%ymm1
-    0.49 :   3aee8:  vbroadcastss 0x591e3(%rip),%ymm5        # 940d4 <_fini+0xf90>
-    0.03 :   3aef1:  vmulps %ymm5,%ymm11,%ymm2
-    0.57 :   3aef5:  vaddps %ymm2,%ymm1,%ymm1
-    0.00 :   3aef9:  vmulps %ymm7,%ymm15,%ymm2
-    0.09 :   3aefd:  vmulps %ymm5,%ymm9,%ymm3
-    0.00 :   3af01:  vsubps %ymm3,%ymm2,%ymm2
-    0.34 :   3af05:  vmulps %ymm6,%ymm10,%ymm3
-    0.03 :   3af09:  vsubps %ymm3,%ymm2,%ymm2
-    0.09 :   3af0d:  vmulps %ymm8,%ymm11,%ymm3
-    0.10 :   3af12:  vsubps %ymm3,%ymm2,%ymm2
-    0.00 :   3af16:  vmulps %ymm8,%ymm15,%ymm3
-    0.00 :   3af1b:  vmulps %ymm6,%ymm9,%ymm4
-    0.16 :   3af1f:  vsubps %ymm4,%ymm3,%ymm3
-    0.00 :   3af23:  vmulps %ymm5,%ymm10,%ymm4
-    0.34 :   3af27:  vaddps %ymm4,%ymm3,%ymm3
-    0.00 :   3af2b:  vmulps %ymm7,%ymm11,%ymm4
-    0.46 :   3af2f:  vaddps %ymm4,%ymm3,%ymm3
-    0.16 :   3af33:  vmulps %ymm5,%ymm15,%ymm4
-    0.16 :   3af37:  vmulps %ymm8,%ymm9,%ymm5
-    0.09 :   3af3c:  vsubps %ymm5,%ymm4,%ymm4
-    0.42 :   3af40:  vmulps %ymm7,%ymm10,%ymm5
-    0.37 :   3af44:  vaddps %ymm5,%ymm4,%ymm4
-    0.55 :   3af48:  vmulps %ymm6,%ymm11,%ymm5
-    0.08 :   3af4c:  vsubps %ymm5,%ymm4,%ymm4
-    1.54 :   3af50:  vaddps %ymm4,%ymm0,%ymm5
-    0.20 :   3af54:  vsubps %ymm4,%ymm0,%ymm0
-    0.12 :   3af58:  vaddps %ymm3,%ymm14,%ymm4
-    0.00 :   3af5c:  vsubps %ymm3,%ymm14,%ymm3
-    0.29 :   3af60:  vaddps %ymm2,%ymm13,%ymm8
-    0.06 :   3af64:  vsubps %ymm2,%ymm13,%ymm2
-    0.12 :   3af68:  vaddps %ymm1,%ymm12,%ymm9
-    0.08 :   3af6c:  vsubps %ymm1,%ymm12,%ymm1
-    0.27 :   3af70:  vmovaps %ymm9,0x40(%rsp)
-    0.06 :   3af76:  vmovaps %ymm8,0x60(%rsp)
-    0.06 :   3af7c:  vmovaps %ymm4,0x80(%rsp)
-    0.00 :   3af85:  vmovaps %ymm5,0xa0(%rsp)
-    0.37 :   3af8e:  vmovaps %ymm0,0xc0(%rsp)
-    0.07 :   3af97:  vmovaps %ymm3,0xe0(%rsp)
-    0.03 :   3afa0:  vmovaps %ymm2,0x100(%rsp)
-    0.06 :   3afa9:  vmovaps %ymm1,0x120(%rsp)
-    0.36 :   3afb2:  vmovaps 0x80(%rsp),%xmm10
-    0.23 :   3afbb:  vmovaps 0xa0(%rsp),%xmm0
-    1.78 :   3afc4:  vmovlhps %xmm10,%xmm0,%xmm3
-    0.04 :   3afc9:  vmovaps 0x60(%rsp),%xmm1
-    0.00 :   3afcf:  vmovaps 0x40(%rsp),%xmm2
-    0.11 :   3afd5:  vunpcklps %xmm1,%xmm2,%xmm4
-    1.29 :   3afd9:  vshufps $0x24,%xmm3,%xmm4,%xmm3
-    0.00 :   3afde:  vmovaps 0xe0(%rsp),%xmm12
-    0.05 :   3afe7:  vmovaps 0xc0(%rsp),%xmm14
-    0.27 :   3aff0:  vunpcklps %xmm12,%xmm14,%xmm4
-    0.93 :   3aff5:  vinsertf128 $0x1,%xmm4,%ymm0,%ymm4
-    0.04 :   3affb:  vmovaps 0x100(%rsp),%xmm5
-    0.00 :   3b004:  vmovaps 0x120(%rsp),%xmm13
-    0.14 :   3b00d:  vmovlhps %xmm5,%xmm13,%xmm8
-    1.37 :   3b011:  vshufps $0x24,%xmm8,%xmm8,%xmm8
-    0.60 :   3b017:  vinsertf128 $0x1,%xmm8,%ymm0,%ymm8
-    1.62 :   3b01d:  vblendps $0xc0,%ymm8,%ymm4,%ymm4
-    0.97 :   3b023:  vblendps $0xf,%ymm3,%ymm4,%ymm3
-    0.06 :   3b029:  vmovaps %ymm3,(%rsp)
-    0.05 :   3b02e:  vinsertps $0x4c,%xmm2,%xmm1,%xmm3
-    0.09 :   3b034:  vunpcklps %xmm0,%xmm10,%xmm4
-    0.83 :   3b038:  vblendps $0x3,%xmm3,%xmm4,%xmm3
-    0.27 :   3b03e:  vunpcklps %xmm13,%xmm5,%xmm4
-    0.68 :   3b043:  vinsertf128 $0x1,%xmm4,%ymm0,%ymm4
-    0.00 :   3b049:  vinsertps $0x4c,%xmm14,%xmm12,%xmm8
-    0.47 :   3b04f:  vinsertf128 $0x1,%xmm8,%ymm0,%ymm8
-    0.46 :   3b055:  vblendps $0xc0,%ymm4,%ymm8,%ymm4
-    0.52 :   3b05b:  vblendps $0xf,%ymm3,%ymm4,%ymm3
-    0.00 :   3b061:  vmovaps %ymm3,0x20(%rsp)
-    0.00 :   3b067:  vunpckhps %xmm1,%xmm2,%xmm3
-    0.15 :   3b06b:  vinsertps $0xb3,%xmm0,%xmm10,%xmm4
-    0.78 :   3b071:  vblendps $0x3,%xmm3,%xmm4,%xmm3
-    0.00 :   3b077:  vinsertps $0xb3,%xmm13,%xmm5,%xmm4
-    0.10 :   3b07d:  vinsertf128 $0x1,%xmm4,%ymm0,%ymm4
-    0.04 :   3b083:  vunpckhps %xmm12,%xmm14,%xmm11
-    0.69 :   3b088:  vinsertf128 $0x1,%xmm11,%ymm0,%ymm11
-    1.34 :   3b08e:  vblendps $0xc0,%ymm4,%ymm11,%ymm4
-    0.56 :   3b094:  vblendps $0xf,%ymm3,%ymm4,%ymm11
-    0.04 :   3b09a:  vunpckhps %xmm0,%xmm10,%xmm0
-    0.00 :   3b09e:  vshufps $0x33,%xmm2,%xmm1,%xmm1
-    0.12 :   3b0a3:  vshufps $0xe2,%xmm0,%xmm1,%xmm0
-    0.48 :   3b0a8:  vunpckhps %xmm13,%xmm5,%xmm1
-    0.00 :   3b0ad:  vmovaps 0xe0(%rsp),%ymm13
-    0.25 :   3b0b6:  vshufps $0x33,%xmm14,%xmm12,%xmm2
-    0.00 :   3b0bc:  vmovaps 0xc0(%rsp),%ymm14
-    1.04 :   3b0c5:  vinsertf128 $0x1,%xmm1,%ymm0,%ymm1
-    0.20 :   3b0cb:  vshufps $0xe2,%xmm2,%xmm2,%xmm2
-    0.67 :   3b0d0:  vinsertf128 $0x1,%xmm2,%ymm0,%ymm2
-    0.87 :   3b0d6:  vblendps $0xc0,%ymm1,%ymm2,%ymm1
-    0.00 :   3b0dc:  vmovaps 0x100(%rsp),%ymm15
-    0.42 :   3b0e5:  vblendps $0xf,%ymm0,%ymm1,%ymm10
-    0.00 :   3b0eb:  vmovaps 0x120(%rsp),%ymm4
-    0.00 :   3b0f4:  vunpcklpd %ymm15,%ymm4,%ymm0
-    0.00 :   3b0f9:  vunpcklps %ymm13,%ymm14,%ymm1
-    0.42 :   3b0fe:  vshufps $0x24,%ymm0,%ymm1,%ymm5
-    0.00 :   3b103:  vmovaps 0xa0(%rsp),%ymm3
-    0.00 :   3b10c:  vmovaps 0x80(%rsp),%ymm1
-    0.00 :   3b115:  vunpcklps %ymm3,%ymm1,%ymm0
-    0.52 :   3b119:  vpermpd $0xaa,%ymm0,%ymm12
-    0.00 :   3b11f:  vmovaps 0x40(%rsp),%ymm2
-    0.00 :   3b125:  vmovaps 0x60(%rsp),%ymm0
-    0.00 :   3b12b:  vunpcklps %ymm0,%ymm2,%ymm7
-    0.62 :   3b12f:  vextractf128 $0x1,%ymm7,%xmm7
-    0.78 :   3b135:  vblendps $0x3,%xmm7,%xmm12,%xmm7
-    0.58 :   3b13b:  vblendps $0xf,%ymm7,%ymm5,%ymm8
-    0.00 :   3b141:  vunpcklps %ymm4,%ymm15,%ymm7
-    0.05 :   3b145:  vshufps $0x11,%ymm14,%ymm13,%ymm12
-    0.13 :   3b14b:  vshufps $0xe2,%ymm7,%ymm12,%ymm7
-    0.46 :   3b150:  vshufps $0x11,%ymm1,%ymm3,%ymm12
-    0.06 :   3b155:  vmovaps 0x140(%rsp),%ymm5
-    0.11 :   3b15e:  vpermps %ymm12,%ymm5,%ymm12
-    0.04 :   3b163:  vshufps $0x11,%ymm2,%ymm0,%ymm6
-    0.63 :   3b168:  vextractf128 $0x1,%ymm6,%xmm6
-    1.11 :   3b16e:  vshufps $0xe2,%xmm12,%xmm6,%xmm6
-    2.02 :   3b174:  vblendps $0xf,%ymm6,%ymm7,%ymm12
-    0.00 :   3b17a:  vunpckhpd %ymm15,%ymm4,%ymm6
-    0.05 :   3b17f:  vunpckhps %ymm13,%ymm14,%ymm7
-    0.05 :   3b184:  vshufps $0x24,%ymm6,%ymm7,%ymm6
-    0.66 :   3b189:  vunpckhps %ymm3,%ymm1,%ymm7
-    0.78 :   3b18d:  vpermpd $0xaa,%ymm7,%ymm7
-    0.00 :   3b193:  vunpckhps %ymm0,%ymm2,%ymm9
-    0.05 :   3b197:  vextractf128 $0x1,%ymm9,%xmm9
-    1.21 :   3b19d:  vblendps $0x3,%xmm9,%xmm7,%xmm7
-    0.61 :   3b1a3:  vblendps $0xf,%ymm7,%ymm6,%ymm6
-    0.00 :   3b1a9:  vunpckhps %ymm4,%ymm15,%ymm4
-    0.00 :   3b1ad:  vshufps $0x33,%ymm14,%ymm13,%ymm7
-    0.25 :   3b1b3:  vshufps $0xe2,%ymm4,%ymm7,%ymm4
-    0.86 :   3b1b8:  vshufps $0x33,%ymm1,%ymm3,%ymm1
-    0.15 :   3b1bd:  vpermps %ymm1,%ymm5,%ymm1
-    0.00 :   3b1c2:  vshufps $0x33,%ymm2,%ymm0,%ymm0
-    0.31 :   3b1c7:  vextractf128 $0x1,%ymm0,%xmm0
-    0.80 :   3b1cd:  vshufps $0xe2,%xmm1,%xmm0,%xmm0
-    1.70 :   3b1d2:  vblendps $0xf,%ymm0,%ymm4,%ymm13
-    0.00 :   3b1d8:  vmovaps (%rsp),%ymm1
-    0.00 :   3b1dd:  vaddps %ymm1,%ymm8,%ymm0
-    0.00 :   3b1e1:  vsubps %ymm8,%ymm1,%ymm1
-    0.50 :   3b1e6:  vbroadcastss 0x58ecd(%rip),%ymm4        # 940bc <_fini+0xf78>
-    0.00 :   3b1ef:  vmulps %ymm4,%ymm11,%ymm2
-    0.00 :   3b1f3:  vbroadcastss 0x58ec4(%rip),%ymm5        # 940c0 <_fini+0xf7c>
-    0.00 :   3b1fc:  vmulps %ymm5,%ymm6,%ymm3
-    0.45 :   3b200:  vaddps %ymm3,%ymm2,%ymm2
-    0.00 :   3b204:  vmulps %ymm5,%ymm11,%ymm3
-    0.00 :   3b208:  vmulps %ymm4,%ymm6,%ymm4
-    0.00 :   3b20c:  vsubps %ymm4,%ymm3,%ymm3
-    0.73 :   3b210:  vbroadcastss 0x58eab(%rip),%ymm5        # 940c4 <_fini+0xf80>
-    0.00 :   3b219:  vmulps %ymm5,%ymm0,%ymm4
-    0.05 :   3b21d:  vmulps %ymm5,%ymm1,%ymm0
-    0.24 :   3b221:  vaddps %ymm2,%ymm4,%ymm1
-    0.21 :   3b225:  vaddps %ymm3,%ymm0,%ymm5
-    0.00 :   3b229:  vsubps %ymm3,%ymm0,%ymm0
-    0.16 :   3b22d:  vsubps %ymm2,%ymm4,%ymm2
-    0.00 :   3b231:  vbroadcastss 0x58e8e(%rip),%ymm9        # 940c8 <_fini+0xf84>
-    0.38 :   3b23a:  vmovaps 0x20(%rsp),%ymm15
-    0.00 :   3b240:  vmulps %ymm9,%ymm15,%ymm3
-    0.09 :   3b245:  vbroadcastss 0x58e7e(%rip),%ymm11        # 940cc <_fini+0xf88>
-    0.00 :   3b24e:  vmulps %ymm11,%ymm10,%ymm4
-    0.47 :   3b253:  vaddps %ymm4,%ymm3,%ymm3
-    0.10 :   3b257:  vbroadcastss 0x58e70(%rip),%ymm8        # 940d0 <_fini+0xf8c>
-    0.06 :   3b260:  vmulps %ymm8,%ymm12,%ymm4
-    0.14 :   3b265:  vaddps %ymm4,%ymm3,%ymm3
-    0.38 :   3b269:  vbroadcastss 0x58e62(%rip),%ymm14        # 940d4 <_fini+0xf90>
-    0.00 :   3b272:  vmulps %ymm14,%ymm13,%ymm4
-    0.53 :   3b277:  vaddps %ymm4,%ymm3,%ymm3
-    0.06 :   3b27b:  vmulps %ymm11,%ymm15,%ymm4
-    0.29 :   3b280:  vmulps %ymm14,%ymm10,%ymm6
-    0.00 :   3b285:  vsubps %ymm6,%ymm4,%ymm4
-    0.81 :   3b289:  vmulps %ymm9,%ymm12,%ymm6
-    0.09 :   3b28e:  vsubps %ymm6,%ymm4,%ymm4
-    0.10 :   3b292:  vmulps %ymm8,%ymm13,%ymm6
-    0.13 :   3b297:  vsubps %ymm6,%ymm4,%ymm4
-    0.24 :   3b29b:  vmulps %ymm8,%ymm15,%ymm6
-    0.00 :   3b2a0:  vmulps %ymm9,%ymm10,%ymm7
-    0.18 :   3b2a5:  vsubps %ymm7,%ymm6,%ymm6
-    0.29 :   3b2a9:  vmulps %ymm14,%ymm12,%ymm7
-    0.41 :   3b2ae:  vaddps %ymm7,%ymm6,%ymm6
-    0.00 :   3b2b2:  vmulps %ymm11,%ymm13,%ymm7
-    0.14 :   3b2b7:  vaddps %ymm7,%ymm6,%ymm6
-    0.04 :   3b2bb:  vmulps %ymm14,%ymm15,%ymm7
-    0.10 :   3b2c0:  vmulps %ymm8,%ymm10,%ymm8
-    0.04 :   3b2c5:  vsubps %ymm8,%ymm7,%ymm7
-    0.57 :   3b2ca:  vmulps %ymm11,%ymm12,%ymm8
-    0.28 :   3b2cf:  vaddps %ymm7,%ymm8,%ymm7
-    0.36 :   3b2d3:  vmulps %ymm9,%ymm13,%ymm8
-    0.30 :   3b2d8:  vsubps %ymm8,%ymm7,%ymm7
-    0.85 :   3b2dd:  vaddps %ymm7,%ymm2,%ymm8
-    0.10 :   3b2e1:  vsubps %ymm7,%ymm2,%ymm2
-    0.11 :   3b2e5:  vaddps %ymm6,%ymm0,%ymm7
-    0.00 :   3b2e9:  vsubps %ymm6,%ymm0,%ymm0
-    0.07 :   3b2ed:  vaddps %ymm4,%ymm5,%ymm6
-    0.04 :   3b2f1:  vsubps %ymm4,%ymm5,%ymm4
-    0.12 :   3b2f5:  vaddps %ymm3,%ymm1,%ymm5
-    0.00 :   3b2f9:  vsubps %ymm3,%ymm1,%ymm1
-    0.11 :   3b2fd:  vmovups %ymm5,(%rdi)
-    0.00 :   3b301:  vmovups %ymm6,0x20(%rdi)
-    0.06 :   3b306:  vmovups %ymm7,0x40(%rdi)
-    0.00 :   3b30b:  vmovups %ymm8,0x60(%rdi)
-    0.40 :   3b310:  vmovups %ymm2,0x80(%rdi)
-    0.10 :   3b318:  vmovups %ymm0,0xa0(%rdi)
-    0.11 :   3b320:  vmovups %ymm4,0xc0(%rdi)
-    0.27 :   3b328:  vmovups %ymm1,0xe0(%rdi)
-    0.35 :   3b330:  mov    %rbp,%rsp
-    0.05 :   3b333:  pop    %rbp
-    0.32 :   3b334:  vzeroupper
-    0.00 :   3b337:  ret
-
-## jpeg_engine::idct::batch_idct_2d
-
- Percent |	Source code & Disassembly of bench for cpu/cycles/Pu (6 samples, percent: local period)
--------------------------------------------------------------------------------------------------------
-         :
-         :
-         :
-         : 3     Disassembly of section .text:
-         :
-         : 5     000000000003bd90 <jpeg_engine::idct::batch_idct_2d>:
-    0.00 :   3bd90:  push   %rbp
-    0.00 :   3bd91:  push   %r15
-    0.00 :   3bd93:  push   %r14
-    0.00 :   3bd95:  push   %r13
-    0.00 :   3bd97:  push   %r12
-    0.00 :   3bd99:  push   %rbx
-    0.00 :   3bd9a:  sub    $0x28,%rsp
-    0.00 :   3bd9e:  test   %rsi,%rsi
-    0.00 :   3bda1:  je     3bedc <jpeg_engine::idct::batch_idct_2d+0x14c>
-    0.00 :   3bda7:  mov    %rsi,%rbx
-    0.00 :   3bdaa:  mov    %rdi,%r14
-    0.00 :   3bdad:  cmp    $0xfff,%rsi
-    0.00 :   3bdb4:  ja     3bdd9 <jpeg_engine::idct::batch_idct_2d+0x49>
-    0.00 :   3bdb6:  cs nopw 0x0(%rax,%rax,1)
-    0.00 :   3bdc0:  mov    %r14,%rdi
-   33.57 :   3bdc3:  call   3abf0 <jpeg_engine::idct::idct_2d>
-    0.00 :   3bdc8:  add    $0x100,%r14
-    0.00 :   3bdcf:  dec    %rbx
-   66.43 :   3bdd2:  jne    3bdc0 <jpeg_engine::idct::batch_idct_2d+0x30>
-    0.00 :   3bdd4:  jmp    3bedc <jpeg_engine::idct::batch_idct_2d+0x14c>
-    0.00 :   3bdd9:  call   78510 <std::thread::functions::available_parallelism>
-    0.00 :   3bdde:  test   $0x1,%al
-    0.00 :   3bde0:  je     3be29 <jpeg_engine::idct::batch_idct_2d+0x99>
-    0.00 :   3bde2:  mov    %edx,%eax
-    0.00 :   3bde4:  and    $0x3,%eax
-    0.00 :   3bde7:  mov    $0x10,%r13d
-    0.00 :   3bded:  cmp    $0x1,%eax
-    0.00 :   3bdf0:  jne    3be39 <jpeg_engine::idct::batch_idct_2d+0xa9>
-    0.00 :   3bdf2:  mov    %rdx,%r15
-    0.00 :   3bdf5:  dec    %r15
-    0.00 :   3bdf8:  mov    -0x1(%rdx),%r12
-    0.00 :   3bdfc:  mov    0x7(%rdx),%rbp
-    0.00 :   3be00:  mov    0x0(%rbp),%rax
-    0.00 :   3be04:  test   %rax,%rax
-    0.00 :   3be07:  je     3be0e <jpeg_engine::idct::batch_idct_2d+0x7e>
-    0.00 :   3be09:  mov    %r12,%rdi
-    0.00 :   3be0c:  call   *%rax
-    0.00 :   3be0e:  cmpq   $0x0,0x8(%rbp)
-    0.00 :   3be13:  je     3be1e <jpeg_engine::idct::batch_idct_2d+0x8e>
-    0.00 :   3be15:  mov    %r12,%rdi
-    0.00 :   3be18:  call   *0x7ef72(%rip)        # bad90 <free@GLIBC_2.2.5>
-    0.00 :   3be1e:  mov    %r15,%rdi
-    0.00 :   3be21:  call   *0x7ef69(%rip)        # bad90 <free@GLIBC_2.2.5>
-    0.00 :   3be27:  jmp    3be39 <jpeg_engine::idct::batch_idct_2d+0xa9>
-    0.00 :   3be29:  shl    $0x2,%rdx
-    0.00 :   3be2d:  mov    %rdx,%r13
-    0.00 :   3be30:  test   %rdx,%rdx
-    0.00 :   3be33:  je     3beeb <jpeg_engine::idct::batch_idct_2d+0x15b>
-    0.00 :   3be39:  mov    %rbx,%rax
-    0.00 :   3be3c:  or     %r13,%rax
-    0.00 :   3be3f:  shr    $0x20,%rax
-    0.00 :   3be43:  je     3be4f <jpeg_engine::idct::batch_idct_2d+0xbf>
-    0.00 :   3be45:  mov    %rbx,%rax
-    0.00 :   3be48:  xor    %edx,%edx
-    0.00 :   3be4a:  div    %r13
-    0.00 :   3be4d:  jmp    3be56 <jpeg_engine::idct::batch_idct_2d+0xc6>
-    0.00 :   3be4f:  mov    %ebx,%eax
-    0.00 :   3be51:  xor    %edx,%edx
-    0.00 :   3be53:  div    %r13d
-    0.00 :   3be56:  cmp    $0x81,%rax
-    0.00 :   3be5c:  mov    $0x80,%ecx
-    0.00 :   3be61:  cmovae %rax,%rcx
-    0.00 :   3be65:  mov    %rbx,%rax
-    0.00 :   3be68:  or     %rcx,%rax
-    0.00 :   3be6b:  shr    $0x20,%rax
-    0.00 :   3be6f:  je     3be7e <jpeg_engine::idct::batch_idct_2d+0xee>
-    0.00 :   3be71:  mov    %rbx,%rax
-    0.00 :   3be74:  xor    %edx,%edx
-    0.00 :   3be76:  div    %rcx
-    0.00 :   3be79:  mov    %rax,%r15
-    0.00 :   3be7c:  jmp    3be87 <jpeg_engine::idct::batch_idct_2d+0xf7>
-    0.00 :   3be7e:  mov    %ebx,%eax
-    0.00 :   3be80:  xor    %edx,%edx
-    0.00 :   3be82:  div    %ecx
-    0.00 :   3be84:  mov    %eax,%r15d
-    0.00 :   3be87:  cmp    $0x1,%rdx
-    0.00 :   3be8b:  sbb    $0xffffffffffffffff,%r15
-    0.00 :   3be8f:  mov    %rcx,0x20(%rsp)
-    0.00 :   3be94:  mov    %r14,0x10(%rsp)
-    0.00 :   3be99:  mov    %rbx,0x18(%rsp)
-    0.00 :   3be9e:  mov    %fs:0xffffffffffffff90,%rax
-    0.00 :   3bea7:  test   %rax,%rax
-    0.00 :   3beaa:  je     3beb4 <jpeg_engine::idct::batch_idct_2d+0x124>
-    0.00 :   3beac:  add    $0x110,%rax
-    0.00 :   3beb2:  jmp    3beb9 <jpeg_engine::idct::batch_idct_2d+0x129>
-    0.00 :   3beb4:  call   5be40 <rayon_core::registry::global_registry>
-    0.00 :   3beb9:  mov    (%rax),%rax
-    0.00 :   3bebc:  mov    0x208(%rax),%rdx
-    0.00 :   3bec3:  lea    0x10(%rsp),%r8
-    0.00 :   3bec8:  lea    0xf(%rsp),%r9
-    0.00 :   3becd:  mov    $0x1,%ecx
-    0.00 :   3bed2:  mov    %r15,%rdi
-    0.00 :   3bed5:  xor    %esi,%esi
-    0.00 :   3bed7:  call   3bf20 <rayon::iter::plumbing::bridge_producer_consumer::helper>
-    0.00 :   3bedc:  add    $0x28,%rsp
-    0.00 :   3bee0:  pop    %rbx
-    0.00 :   3bee1:  pop    %r12
-    0.00 :   3bee3:  pop    %r13
-    0.00 :   3bee5:  pop    %r14
-    0.00 :   3bee7:  pop    %r15
-    0.00 :   3bee9:  pop    %rbp
-    0.00 :   3beea:  ret
-    0.00 :   3beeb:  lea    0x7b83e(%rip),%rdi        # b7730 <__do_global_dtors_aux_fini_array_entry+0xa40>
-    0.00 :   3bef2:  call   9840 <core::panicking::panic_const::panic_const_div_by_zero>
-    0.00 :   3bef7:  mov    %rax,%rbx
-    0.00 :   3befa:  cmpq   $0x0,0x8(%rbp)
-    0.00 :   3beff:  je     3bf0a <jpeg_engine::idct::batch_idct_2d+0x17a>
-    0.00 :   3bf01:  mov    %r12,%rdi
-    0.00 :   3bf04:  call   *0x7ee86(%rip)        # bad90 <free@GLIBC_2.2.5>
-    0.00 :   3bf0a:  mov    %r15,%rdi
-    0.00 :   3bf0d:  call   *0x7ee7d(%rip)        # bad90 <free@GLIBC_2.2.5>
-    0.00 :   3bf13:  mov    %rbx,%rdi
-    0.00 :   3bf16:  call   7030 <_Unwind_Resume@plt>

@@ -269,9 +269,9 @@ class ChildProcess:
             f" via OpenCL, Vulkan, or CUDA. Use the 'gpu' Cargo feature.\n"
             f"   ENVIRONMENT: 'cargo' and 'rustc' are on PATH."
             f" You are already inside the correct shell.\n"
-            f"4) Run 'cargo test --release --features gpu' from src/jpeg_engine/"
+            f"4) Run 'cargo test --release' from src/jpeg_engine/"
             f" to confirm all tests pass.\n"
-            f"5) Run 'cargo run --release --features gpu --bin bench -- 100 fitness.score'"
+            f"5) Run 'cargo run --release --bin bench -- 100 fitness.score'"
             f" to VALIDATE YOUR CHANGES WORK."
             f" You MUST run this yourself to check performance improves."
             f" If the benchmark shows regression, debug and fix it before finishing.\n"
@@ -321,7 +321,7 @@ class ChildProcess:
 
         print(f"  [Attempt {self.attempt}] Running cargo test...")
         test_result = subprocess.run(
-            ["cargo", "test", "--release", "--features", "gpu"],
+            ["cargo", "test", "--release"],
             cwd=engine_dir, capture_output=True, text=True,
         )
         test_log = os.path.join(self.dir, "test_output.log")
@@ -341,7 +341,7 @@ class ChildProcess:
         print(f"  [Attempt {self.attempt}] Running cargo bench...")
         bench_path = os.path.join(self.dir, "fitness.score")
 
-        bench_cmd = ["cargo", "run", "--release", "--features", "gpu",
+        bench_cmd = ["cargo", "run", "--release",
                       "--bin", "bench", "--", "5000", bench_path]
         use_perf = _perf_available()
 

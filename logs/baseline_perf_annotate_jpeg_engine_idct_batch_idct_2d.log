@@ -1,0 +1,121 @@
+ Percent |	Source code & Disassembly of bench for cpu/cycles/Pu (5 samples, percent: local period)
+-------------------------------------------------------------------------------------------------------
+         :
+         :
+         :
+         : 3     Disassembly of section .text:
+         :
+         : 5     000000000003bd90 <jpeg_engine::idct::batch_idct_2d>:
+    0.00 :   3bd90:  push   %rbp
+    0.00 :   3bd91:  push   %r15
+    0.00 :   3bd93:  push   %r14
+    0.00 :   3bd95:  push   %r13
+    0.00 :   3bd97:  push   %r12
+    0.00 :   3bd99:  push   %rbx
+    0.00 :   3bd9a:  sub    $0x28,%rsp
+    0.00 :   3bd9e:  test   %rsi,%rsi
+    0.00 :   3bda1:  je     3bedc <jpeg_engine::idct::batch_idct_2d+0x14c>
+    0.00 :   3bda7:  mov    %rsi,%rbx
+    0.00 :   3bdaa:  mov    %rdi,%r14
+    0.00 :   3bdad:  cmp    $0xfff,%rsi
+    0.00 :   3bdb4:  ja     3bdd9 <jpeg_engine::idct::batch_idct_2d+0x49>
+    0.00 :   3bdb6:  cs nopw 0x0(%rax,%rax,1)
+    0.00 :   3bdc0:  mov    %r14,%rdi
+   39.68 :   3bdc3:  call   3abf0 <jpeg_engine::idct::idct_2d>
+    0.00 :   3bdc8:  add    $0x100,%r14
+    0.00 :   3bdcf:  dec    %rbx
+   60.32 :   3bdd2:  jne    3bdc0 <jpeg_engine::idct::batch_idct_2d+0x30>
+    0.00 :   3bdd4:  jmp    3bedc <jpeg_engine::idct::batch_idct_2d+0x14c>
+    0.00 :   3bdd9:  call   78510 <std::thread::functions::available_parallelism>
+    0.00 :   3bdde:  test   $0x1,%al
+    0.00 :   3bde0:  je     3be29 <jpeg_engine::idct::batch_idct_2d+0x99>
+    0.00 :   3bde2:  mov    %edx,%eax
+    0.00 :   3bde4:  and    $0x3,%eax
+    0.00 :   3bde7:  mov    $0x10,%r13d
+    0.00 :   3bded:  cmp    $0x1,%eax
+    0.00 :   3bdf0:  jne    3be39 <jpeg_engine::idct::batch_idct_2d+0xa9>
+    0.00 :   3bdf2:  mov    %rdx,%r15
+    0.00 :   3bdf5:  dec    %r15
+    0.00 :   3bdf8:  mov    -0x1(%rdx),%r12
+    0.00 :   3bdfc:  mov    0x7(%rdx),%rbp
+    0.00 :   3be00:  mov    0x0(%rbp),%rax
+    0.00 :   3be04:  test   %rax,%rax
+    0.00 :   3be07:  je     3be0e <jpeg_engine::idct::batch_idct_2d+0x7e>
+    0.00 :   3be09:  mov    %r12,%rdi
+    0.00 :   3be0c:  call   *%rax
+    0.00 :   3be0e:  cmpq   $0x0,0x8(%rbp)
+    0.00 :   3be13:  je     3be1e <jpeg_engine::idct::batch_idct_2d+0x8e>
+    0.00 :   3be15:  mov    %r12,%rdi
+    0.00 :   3be18:  call   *0x7ef72(%rip)        # bad90 <free@GLIBC_2.2.5>
+    0.00 :   3be1e:  mov    %r15,%rdi
+    0.00 :   3be21:  call   *0x7ef69(%rip)        # bad90 <free@GLIBC_2.2.5>
+    0.00 :   3be27:  jmp    3be39 <jpeg_engine::idct::batch_idct_2d+0xa9>
+    0.00 :   3be29:  shl    $0x2,%rdx
+    0.00 :   3be2d:  mov    %rdx,%r13
+    0.00 :   3be30:  test   %rdx,%rdx
+    0.00 :   3be33:  je     3beeb <jpeg_engine::idct::batch_idct_2d+0x15b>
+    0.00 :   3be39:  mov    %rbx,%rax
+    0.00 :   3be3c:  or     %r13,%rax
+    0.00 :   3be3f:  shr    $0x20,%rax
+    0.00 :   3be43:  je     3be4f <jpeg_engine::idct::batch_idct_2d+0xbf>
+    0.00 :   3be45:  mov    %rbx,%rax
+    0.00 :   3be48:  xor    %edx,%edx
+    0.00 :   3be4a:  div    %r13
+    0.00 :   3be4d:  jmp    3be56 <jpeg_engine::idct::batch_idct_2d+0xc6>
+    0.00 :   3be4f:  mov    %ebx,%eax
+    0.00 :   3be51:  xor    %edx,%edx
+    0.00 :   3be53:  div    %r13d
+    0.00 :   3be56:  cmp    $0x81,%rax
+    0.00 :   3be5c:  mov    $0x80,%ecx
+    0.00 :   3be61:  cmovae %rax,%rcx
+    0.00 :   3be65:  mov    %rbx,%rax
+    0.00 :   3be68:  or     %rcx,%rax
+    0.00 :   3be6b:  shr    $0x20,%rax
+    0.00 :   3be6f:  je     3be7e <jpeg_engine::idct::batch_idct_2d+0xee>
+    0.00 :   3be71:  mov    %rbx,%rax
+    0.00 :   3be74:  xor    %edx,%edx
+    0.00 :   3be76:  div    %rcx
+    0.00 :   3be79:  mov    %rax,%r15
+    0.00 :   3be7c:  jmp    3be87 <jpeg_engine::idct::batch_idct_2d+0xf7>
+    0.00 :   3be7e:  mov    %ebx,%eax
+    0.00 :   3be80:  xor    %edx,%edx
+    0.00 :   3be82:  div    %ecx
+    0.00 :   3be84:  mov    %eax,%r15d
+    0.00 :   3be87:  cmp    $0x1,%rdx
+    0.00 :   3be8b:  sbb    $0xffffffffffffffff,%r15
+    0.00 :   3be8f:  mov    %rcx,0x20(%rsp)
+    0.00 :   3be94:  mov    %r14,0x10(%rsp)
+    0.00 :   3be99:  mov    %rbx,0x18(%rsp)
+    0.00 :   3be9e:  mov    %fs:0xffffffffffffff90,%rax
+    0.00 :   3bea7:  test   %rax,%rax
+    0.00 :   3beaa:  je     3beb4 <jpeg_engine::idct::batch_idct_2d+0x124>
+    0.00 :   3beac:  add    $0x110,%rax
+    0.00 :   3beb2:  jmp    3beb9 <jpeg_engine::idct::batch_idct_2d+0x129>
+    0.00 :   3beb4:  call   5be40 <rayon_core::registry::global_registry>
+    0.00 :   3beb9:  mov    (%rax),%rax
+    0.00 :   3bebc:  mov    0x208(%rax),%rdx
+    0.00 :   3bec3:  lea    0x10(%rsp),%r8
+    0.00 :   3bec8:  lea    0xf(%rsp),%r9
+    0.00 :   3becd:  mov    $0x1,%ecx
+    0.00 :   3bed2:  mov    %r15,%rdi
+    0.00 :   3bed5:  xor    %esi,%esi
+    0.00 :   3bed7:  call   3bf20 <rayon::iter::plumbing::bridge_producer_consumer::helper>
+    0.00 :   3bedc:  add    $0x28,%rsp
+    0.00 :   3bee0:  pop    %rbx
+    0.00 :   3bee1:  pop    %r12
+    0.00 :   3bee3:  pop    %r13
+    0.00 :   3bee5:  pop    %r14
+    0.00 :   3bee7:  pop    %r15
+    0.00 :   3bee9:  pop    %rbp
+    0.00 :   3beea:  ret
+    0.00 :   3beeb:  lea    0x7b83e(%rip),%rdi        # b7730 <__do_global_dtors_aux_fini_array_entry+0xa40>
+    0.00 :   3bef2:  call   9840 <core::panicking::panic_const::panic_const_div_by_zero>
+    0.00 :   3bef7:  mov    %rax,%rbx
+    0.00 :   3befa:  cmpq   $0x0,0x8(%rbp)
+    0.00 :   3beff:  je     3bf0a <jpeg_engine::idct::batch_idct_2d+0x17a>
+    0.00 :   3bf01:  mov    %r12,%rdi
+    0.00 :   3bf04:  call   *0x7ee86(%rip)        # bad90 <free@GLIBC_2.2.5>
+    0.00 :   3bf0a:  mov    %r15,%rdi
+    0.00 :   3bf0d:  call   *0x7ee7d(%rip)        # bad90 <free@GLIBC_2.2.5>
+    0.00 :   3bf13:  mov    %rbx,%rdi
+    0.00 :   3bf16:  call   7030 <_Unwind_Resume@plt>
