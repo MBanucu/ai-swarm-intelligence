@@ -13,7 +13,7 @@ GEN_FILE = os.path.join(ROOT_DIR, "logs", "current_gen.json")
 BASE_CODE = os.path.join(ROOT_DIR, "base_code")
 ARCHIVE_DIR = os.path.join(ROOT_DIR, "logs", "archived_agents")
 BASE_TEMPLATE = os.path.join(ROOT_DIR, ".opencode", "agents", "base_template.md")
-BENCHMARK_HISTORY = os.path.join(ROOT_DIR, "logs", "benchmark_history.md")
+BENCHMARK_HISTORY = os.path.join(ROOT_DIR, "logs", "benchmark_history.json")
 IMPROVEMENT_DIR = os.path.join(ROOT_DIR, "improvement_suggestions")
 
 
@@ -411,11 +411,19 @@ def _save_state(gen, attempt, best_score=None):
 
 def _log_attempt(gen, attempt, score, status):
     ts = datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
-    entry = json.dumps(
-        {"gen": gen, "attempt": attempt, "score": score, "status": status, "timestamp": ts}
-    )
-    with open(BENCHMARK_HISTORY, "a") as f:
-        f.write(entry + "\n")
+    entry = {"gen": gen, "attempt": attempt, "score": score, "status": status, "timestamp": ts}
+    if os.path.exists(BENCHMARK_HISTORY):
+        with open(BENCHMARK_HISTORY) as f:
+            try:
+                history = json.load(f)
+            except json.JSONDecodeError:
+                history = []
+    else:
+        history = []
+    history.append(entry)
+    with open(BENCHMARK_HISTORY, "w") as f:
+        json.dump(history, f, indent=2)
+        f.write("\n")
 
 
 def main():
@@ -441,18 +449,15 @@ def main():
     prev_best = None
     if gen > 1 and os.path.exists(BENCHMARK_HISTORY):
         with open(BENCHMARK_HISTORY) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    if entry.get("gen") == gen - 1:
-                        score = float(entry["score"])
-                        if prev_best is None or score < prev_best:
-                            prev_best = score
-                except (json.JSONDecodeError, KeyError, ValueError):
-                    pass
+            try:
+                history = json.load(f)
+            except json.JSONDecodeError:
+                history = []
+        for entry in history:
+            if entry.get("gen") == gen - 1:
+                score = float(entry["score"])
+                if prev_best is None or score < prev_best:
+                    prev_best = score
 
     if prev_best is not None:
         print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.3f}ns/block")

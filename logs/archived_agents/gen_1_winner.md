@@ -22,7 +22,7 @@ Maximize blocks-per-second on the benchmark suite. The current record is **67.97
 
 ## Mandatory Steps
 
-1. Read `logs/benchmark_history.md` and files in `improvement_suggestions/`.
+1. Read `logs/benchmark_history.json` and files in `improvement_suggestions/`.
 2. Make focused changes to `src/jpeg_engine/` source files.
 3. Run `cargo test --release` in `src/jpeg_engine/` — ALL tests must pass.
 4. Run `cargo build --release` then `cargo run --release --bin bench -- 5000 fitness.score`.

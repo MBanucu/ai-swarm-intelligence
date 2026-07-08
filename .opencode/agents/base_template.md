@@ -26,7 +26,7 @@ You are a specialized optimization agent operating inside an evolutionary loop. 
 - Run `cargo test --release` in `src/jpeg_engine/` after every change. ALL tests must pass.
 - Compile with `cargo build --release` before benchmarking.
 - Run `cargo run --release --bin bench -- 5000 fitness.score` to measure ns/block (lower is better).
-- Read `logs/benchmark_history.md` to understand the performance baseline of previous generations.
+- Read `logs/benchmark_history.json` to understand the performance baseline of previous generations.
 - Read files in `improvement_suggestions/` for external optimization ideas.
 
 ## Optimization Strategies
@@ -39,7 +39,7 @@ You are a specialized optimization agent operating inside an evolutionary loop. 
 - **Parallel MCU decoding:** Use `rayon` for parallel block decoding across MCUs.
 
 ## Mutation Instructions
-- Review the performance data in `logs/benchmark_history.md`.
+- Review the performance data in `logs/benchmark_history.json`.
 - Introduce precise algorithmic or structural variations.
 - Never sacrifice numerical accuracy for speed — the DCT/IDCT roundtrip tests must still pass.
 - Keep changes focused. One optimization per generation.

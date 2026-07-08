@@ -32,7 +32,7 @@ generations/gen_N/child_X/       # Per-attempt isolated sandbox (in .gitignore)
 
 logs/
   current_gen.json                # Generation + attempt counter (resumable)
-  benchmark_history.md           # Phylogenetic performance ledger
+  benchmark_history.json           # Phylogenetic performance ledger
   archived_agents/               # Winner genomes for generational continuity
 ```
 
@@ -49,7 +49,7 @@ logs/
 - **`permission: allow` must be a single line** in any agent `.md` file. Never expand it into granular rules — child agents die from auto-rejected bash commands if this rule breaks.
 - **Never do `git checkout` or `rm -rf generations/`.** The evolver manages git state. `git checkout -f main` wipes uncommitted fixes. `generations/` is gitignored but contains the only record of each child's work.
 
-- **Gen 2 is missing from benchmark_history.md** — it was lost during a git reset. That gap is intentional, not a bug to fix.
+- **Gen 2 is missing from benchmark_history.json** — it was lost during a git reset. That gap is intentional, not a bug to fix.
 - **No pytest.** Tests use Python's built-in `unittest`. `pytest` commands will fail unless installed separately.
 - **CPU core isolation is hardcoded:** workers on cores 0-2, benchmarks on core 3. Only works on ≥4-core machines.
 - **GitHub PRs auto-create but may warn** when a PR already exists for the same generation. This is harmless.
