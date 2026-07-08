@@ -216,24 +216,39 @@ fn main() {
         Batch { size: 250000, label: "250K",   weight: 0.50 },
     ];
 
-    println!("\nBenchmark (max {} iters/round, adaptive, mode={}):", max_iters, mode);
-    println!("  {:>7} {:>7} {:>10} {:>8}", "Batch", "Blocks", "ns/block", "Weight");
-    println!("  {:->7} {:->7} {:->10} {:->8}", "", "", "", "");
-
-    let mut total: f32 = 0.0;
-    let mut total_weight: f32 = 0.0;
-
-    for batch in &batches {
-        let iters = adaptive_iters(batch.size, max_iters);
-        let mut blocks = create_blocks(batch.size);
-        let ns = benchmark(&mut blocks, iters, mode);
-        println!("  {:>7} {:>7} {:>10.3} {:>7.0}%", batch.label, batch.size, ns, batch.weight * 100.0);
-        total += ns as f32 * batch.weight;
-        total_weight += batch.weight;
+    fn run_mode(batches: &[Batch], max_iters: usize, mode: &str) -> f32 {
+        println!("\nBenchmark (max {} iters/round, adaptive, mode={}):", max_iters, mode);
+        println!("  {:>7} {:>7} {:>10} {:>8}", "Batch", "Blocks", "ns/block", "Weight");
+        println!("  {:->7} {:->7} {:->10} {:->8}", "", "", "", "");
+        let mut total: f32 = 0.0;
+        let mut total_weight: f32 = 0.0;
+        for batch in batches {
+            let iters = adaptive_iters(batch.size, max_iters);
+            let mut blocks = create_blocks(batch.size);
+            let ns = benchmark(&mut blocks, iters, mode);
+            println!("  {:>7} {:>7} {:>10.3} {:>7.0}%",
+                     batch.label, batch.size, ns, batch.weight * 100.0);
+            total += ns as f32 * batch.weight;
+            total_weight += batch.weight;
+        }
+        assert!((total_weight - 1.0).abs() < 0.001, "weights must sum to 1.0");
+        println!("  {:<29} {:>10.3}", "Weighted avg:", total);
+        total
     }
 
-    assert!((total_weight - 1.0).abs() < 0.001, "weights must sum to 1.0");
+    let modes: &[&str] = if mode == "all" {
+        &["auto", "cpu", "gpu"]
+    } else {
+        &[mode]
+    };
 
-    fs::write(&score_path, format!("{:.3}", total)).unwrap();
-    println!("\nFitness (weighted avg): {:.3} ns/block -> {}", total, score_path);
+    let mut combined: f32 = 0.0;
+    for &m in modes {
+        let s = run_mode(&batches, max_iters, m);
+        combined += s;
+    }
+    combined /= modes.len() as f32;
+
+    fs::write(&score_path, format!("{:.3}", combined)).unwrap();
+    println!("\nFitness (combined): {:.3} ns/block -> {}", combined, score_path);
 }

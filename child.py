@@ -344,7 +344,8 @@ class ChildProcess:
         bench_path = os.path.join(self.dir, "fitness.score")
 
         bench_cmd = ["cargo", "run", "--release",
-                      "--bin", "bench", "--", "5000", bench_path]
+                      "--bin", "bench", "--", "5000",
+                      "--mode", "all", "-o", bench_path]
         use_perf = _perf_available()
 
         if use_perf:
