@@ -36,6 +36,7 @@
             opencl-headers
             intel-compute-runtime-legacy1
             clinfo
+            perf
           ];
 
           shellHook = ''

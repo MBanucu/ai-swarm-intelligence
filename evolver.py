@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import sys
 from datetime import datetime, timezone
 import json
@@ -18,12 +19,27 @@ from config import (
 
 from child import ChildProcess
 
+_PERF_EVENTS = "instructions,cycles,cache-misses,branch-misses,task-clock"
+
+
+def _perf_available():
+    return shutil.which("perf") is not None
+
 
 def _run_baseline():
     engine_dir = os.path.join(BASE_CODE, "src", "jpeg_engine")
+    perf_log = os.path.join(ROOT_DIR, "logs", "baseline_perf.log")
+
+    bench_args = ["cargo", "run", "--release", "--features", "gpu",
+                   "--bin", "bench", "--", "5000", "/dev/stdout"]
+    if _perf_available():
+        cmd = ["perf", "stat", "-e", _PERF_EVENTS, "-o", perf_log, "--"] + bench_args
+    else:
+        cmd = bench_args
+
     proc = subprocess.Popen(
-        ["cargo", "run", "--release", "--features", "gpu", "--bin", "bench", "--", "5000", "/dev/stdout"],
-        cwd=engine_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cmd, cwd=engine_dir, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, text=True,
     )
     output_lines = []
     for line in proc.stdout:
@@ -32,6 +48,15 @@ def _run_baseline():
     proc.wait()
     if proc.returncode != 0:
         return None
+
+    if _perf_available() and os.path.exists(perf_log):
+        print(f"\n[swarm] Perf profiling saved to {perf_log}")
+
+    for line in reversed(output_lines):
+        m = re.search(r'Fitness \(weighted avg\):\s*([\d.]+)\s*ns/block', line)
+        if m:
+            return float(m.group(1))
+
     for line in reversed(output_lines):
         try:
             data = json.loads(line.strip())

@@ -3,6 +3,7 @@ import shutil
 import subprocess
 
 from config import (
+    ROOT_DIR,
     BASE_CODE,
     BENCHMARK_HISTORY,
     ARCHIVE_DIR,
@@ -10,6 +11,12 @@ from config import (
     PRIMARY_MODEL,
     FALLBACK_MODEL,
 )
+
+_PERF_EVENTS = "instructions,cycles,cache-misses,branch-misses,task-clock"
+
+
+def _perf_available():
+    return shutil.which("perf") is not None
 
 
 def _run_opencode(args, log_path):
@@ -85,11 +92,14 @@ class ChildProcess:
             f"5) Improvement suggestions: '{IMPROVEMENT_DIR}' — external"
             f" optimization ideas to consider. Read EVERY .md file in this"
             f" directory.\n"
+            f"6) Baseline profiling: '{ROOT_DIR}/logs/baseline_perf.log' —"
+            f" hardware performance counters (instructions, cycles,"
+            f" cache-misses, branch-misses, task-clock) from the parent"
+            f" code's benchmark. This reveals CPU bottlenecks, cache behavior,"
+            f" and branch-prediction efficiency."
+            f" Compare sibling perf_stat.log files against this baseline.\n"
         )
         if self.sibling_failures:
-            prompt += (
-                f"5) Sibling failures from current generation:\n"
-            )
             for f in self.sibling_failures[-5:]:
                 prompt += f"   - Attempt {f['attempt']}: {f['reason']}\n"
             if self.failure_dir:
@@ -107,6 +117,8 @@ class ChildProcess:
                         f" (optimization output)\n"
                         f"     - child_{f['attempt']}/benchmark.log"
                         f" (benchmark output)\n"
+                        f"     - child_{f['attempt']}/perf_stat.log"
+                        f" (hardware counters)\n"
                     )
                 prompt += (
                     f"   Extract the root cause of each failure from the"
@@ -252,6 +264,8 @@ class ChildProcess:
                         f" (compiler errors)\n"
                         f"  - child_{f['attempt']}/lifecycle.log"
                         f" (optimization output)\n"
+                        f"  - child_{f['attempt']}/perf_stat.log"
+                        f" (hardware counters)\n"
                     )
                 prompt += (
                     f"Understand the exact errors that killed each sibling.\n"
@@ -297,11 +311,27 @@ class ChildProcess:
 
         print(f"  [Attempt {self.attempt}] Running cargo bench...")
         bench_path = os.path.join(self.dir, "fitness.score")
-        bench_result = subprocess.run(
-            ["cargo", "run", "--release", "--features", "gpu", "--bin", "bench", "--",
-             "5000", bench_path],
-            cwd=engine_dir, capture_output=True, text=True,
-        )
+
+        bench_cmd = ["cargo", "run", "--release", "--features", "gpu",
+                      "--bin", "bench", "--", "5000", bench_path]
+        use_perf = _perf_available()
+
+        if use_perf:
+            perf_log = os.path.join(self.dir, "perf_stat.log")
+            perf_cmd = ["perf", "stat", "-e", _PERF_EVENTS, "-o", perf_log,
+                        "--"] + bench_cmd
+            bench_result = subprocess.run(
+                perf_cmd,
+                cwd=engine_dir, capture_output=True, text=True,
+            )
+            if bench_result.returncode != 0:
+                use_perf = False
+
+        if not use_perf:
+            bench_result = subprocess.run(
+                bench_cmd,
+                cwd=engine_dir, capture_output=True, text=True,
+            )
 
         bench_log = os.path.join(self.dir, "benchmark.log")
         with open(bench_log, "w") as f:
