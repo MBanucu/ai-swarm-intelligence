@@ -19,5 +19,12 @@
     "score": 39.216,
     "status": "best",
     "timestamp": "2026-07-08T14:51:57+02:00"
+  },
+  {
+    "gen": 2,
+    "attempt": 3,
+    "score": 999.9,
+    "status": "extinction",
+    "timestamp": "2026-07-08T14:59:24+02:00"
   }
 ]

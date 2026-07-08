@@ -3,7 +3,7 @@ description: Base evolutionary agent template for JPEG engine optimization.
 mode: all
 model: opencode/deepseek-v4-flash-free
 temperature: 0.3
-maxSteps: 40
+maxSteps: 80
 tools:
   read: true
   write: true

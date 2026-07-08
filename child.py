@@ -188,7 +188,7 @@ class ChildProcess:
             f"Output a UNIQUE mutated version of this OpenCode agent markdown file."
             f" Write it to '{self.mutated_agent}'.\n"
             f"Use a temperature between 0.3-0.8."
-            f" Tweak the frontmatter parameters (temperature, maxSteps 20-60).\n"
+            f" Tweak the frontmatter parameters (temperature, maxSteps 40-120).\n"
             f"Rephrase optimization strategies differently from the parent"
             f" - try a DIFFERENT algorithmic angle.\n\n"
             f"FREEDOM OF LANGUAGE:\n"
