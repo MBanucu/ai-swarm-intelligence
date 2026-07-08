@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────────
-// Optimised 1‑D IDCT — even/odd decomposition
+// Optimised 1‑D IDCT — butterfly-even / direct-odd
 //
 // The 8×8 IDCT matrix is decomposed into two 4×4 sub‑matrices
 // for the even‑indexed (0,2,4,6) and odd‑indexed (1,3,5,7) columns,
@@ -9,17 +9,29 @@
 //   Odd outputs:   o[0..3] = O_4×4 × src[1,3,5,7]
 //   Final:  out[x] = e[x] + o[x],  out[7−x] = e[x] − o[x]
 //
-// Arithmetic: 32 mul + 40 add per 1‑D transform
-// (vs 64 mul + 56 add for dense 8×8 mat‑vec).
+// The EVEN 4‑point sub‑matrix uses a butterfly structure (6 mults)
+// instead of a full 4×4 mat‑vec (16 mults):
+//   E = [a, b, a, c]   where a = 1/(2√2), b = cos(π/8)/2, c = cos(3π/8)/2
+//       [a, c,-a,-b]
+//       [a,-c,-a, b]
+//       [a,-b, a,-c]
+//
+// The ODD sub‑matrix is a full 4×4 mat‑vec (16 mults) — this matrix
+// does not factor into simple pairwise rotations, so we keep the
+// direct formulation for numerical accuracy.
+//
+// Arithmetic: 22 mul + ~32 add per 1‑D transform
+// (vs 64 mul + 56 add for dense 8×8 mat‑vec, or 32 mul + 40 add
+//  for old even/odd with full 4×4 in both sub‑matrices).
 // ──────────────────────────────────────────────────────
 
-/// Even‑column 4×4 sub‑matrix of the IDCT (columns 0,2,4,6).
-const E: [[f32; 4]; 4] = [
-    [0.35355339059327376, 0.46193976625564337, 0.35355339059327376, 0.19134171618254492],
-    [0.35355339059327376, 0.19134171618254492,-0.35355339059327376,-0.46193976625564337],
-    [0.35355339059327376,-0.19134171618254492,-0.35355339059327376, 0.46193976625564337],
-    [0.35355339059327376,-0.46193976625564337, 0.35355339059327376,-0.19134171618254492],
-];
+/// Even‑column 4×4 sub‑matrix constants — butterfly factors.
+/// a = 1/(2√2) ≈ 0.35355339
+/// b = cos(π/8)/2 ≈ 0.46193977
+/// c = cos(3π/8)/2 ≈ 0.19134172
+const E_A: f32 = 0.35355339059327376;
+const E_B: f32 = 0.46193976625564337;
+const E_C: f32 = 0.19134171618254492;
 
 /// Odd‑column 4×4 sub‑matrix (columns 1,3,5,7).
 const O: [[f32; 4]; 4] = [
@@ -29,25 +41,39 @@ const O: [[f32; 4]; 4] = [
     [0.09754516100806417,-0.27778511650980114, 0.41573480615127262,-0.49039264020161522],
 ];
 
-/// 1‑D IDCT — even/odd decomposition.
+/// 1‑D IDCT — butterfly-even, direct-odd decomposition.
 ///
-/// The 4×4 mat-vec is written as plain scalar loops so LLVM's auto-vectorizer
-/// can generate optimal SIMD (AVX/FMA when target features are enabled via
-/// `.cargo/config.toml`). Manual intrinsics would block other compiler
-/// optimisations like loop unrolling, register renaming, and instruction
-/// scheduling.
+/// Even part uses 6 mults (vs 16 for direct 4×4 mat-vec).
+/// Odd part uses full 4×4 mat-vec (16 mults).
+/// Total: 22 mults + ~32 adds per 1‑D transform.
 #[inline(always)]
 fn idct_1d(src: &[f32; 8]) -> [f32; 8] {
     let s0 = src[0]; let s1 = src[1]; let s2 = src[2]; let s3 = src[3];
     let s4 = src[4]; let s5 = src[5]; let s6 = src[6]; let s7 = src[7];
 
-    // Even part:  4×4 mat‑vec on (s0, s2, s4, s6)
-    let e0 = E[0][0]*s0 + E[0][1]*s2 + E[0][2]*s4 + E[0][3]*s6;
-    let e1 = E[1][0]*s0 + E[1][1]*s2 + E[1][2]*s4 + E[1][3]*s6;
-    let e2 = E[2][0]*s0 + E[2][1]*s2 + E[2][2]*s4 + E[2][3]*s6;
-    let e3 = E[3][0]*s0 + E[3][1]*s2 + E[3][2]*s4 + E[3][3]*s6;
+    // ── Even part: butterfly 4‑point IDCT (6 mults + 8 adds) ──
+    let sum_even  = s0 + s4;    // F0 + F4
+    let diff_even = s0 - s4;    // F0 − F4
 
-    // Odd part:  4×4 mat‑vec on (s1, s3, s5, s7)
+    // 4 multiplications for cross-terms (b·F2, c·F6, c·F2, b·F6)
+    let b_s2 = E_B * s2;
+    let c_s6 = E_C * s6;
+    let c_s2 = E_C * s2;
+    let b_s6 = E_B * s6;
+
+    let even_cross_plus  = b_s2 + c_s6;   // b·F2 + c·F6
+    let even_cross_minus = c_s2 - b_s6;   // c·F2 − b·F6
+
+    // 2 multiplications for DC-like terms
+    let a_sum  = E_A * sum_even;    // a·(F0+F4)
+    let a_diff = E_A * diff_even;   // a·(F0−F4)
+
+    let e0 = a_sum + even_cross_plus;
+    let e1 = a_diff + even_cross_minus;
+    let e2 = a_diff - even_cross_minus;
+    let e3 = a_sum - even_cross_plus;
+
+    // ── Odd part: full 4×4 mat‑vec on (s1, s3, s5, s7) ──
     let o0 = O[0][0]*s1 + O[0][1]*s3 + O[0][2]*s5 + O[0][3]*s7;
     let o1 = O[1][0]*s1 + O[1][1]*s3 + O[1][2]*s5 + O[1][3]*s7;
     let o2 = O[2][0]*s1 + O[2][1]*s3 + O[2][2]*s5 + O[2][3]*s7;
@@ -136,11 +162,27 @@ pub fn batch_idct_2d(blocks: &mut [[f32; 64]]) {
     if n == 0 {
         return;
     }
+    // For small-medium batches, sequential processing avoids rayon's
+    // thread-pool wake-up overhead (~20-100 µs).  Only use parallel
+    // dispatch for batches where the speedup outweighs the fixed cost.
+    if n < 4096 {
+        let ptr = blocks.as_mut_ptr();
+        for i in 0..n {
+            unsafe { idct_2d(&mut *ptr.add(i)); }
+        }
+        return;
+    }
     #[cfg(feature = "rayon")]
     {
         use rayon::prelude::*;
-        // Process 4 blocks per worker chunk for good cache utilization
-        blocks.par_chunks_mut(4).for_each(|chunk| {
+        // Adaptive chunking: target ~4 chunks per CPU core so tasks stay
+        // large enough for L1 cache reuse but numerous enough to balance
+        // load.  Minimum chunk size of 128 prevents excessive task overhead.
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        let chunk_size = (n / (num_threads * 4)).max(128);
+        blocks.par_chunks_mut(chunk_size).for_each(|chunk| {
             for block in chunk {
                 idct_2d(block);
             }

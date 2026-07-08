@@ -60,8 +60,10 @@ pub extern "C" fn idct_2d(block: *mut c_float) {
 // PCIe transfer latency. Smaller batches use the CPU to avoid the
 // ~100–500 µs GPU setup tax. Tuned for the benchmark batch sizes:
 // 10/250/1K/5K/25K/250K blocks with weights 3/7/10/10/20/50%.
-// For iGPUs, set high — OpenCL buffer overhead dominates at < 1M blocks.
-const GPU_THRESHOLD: usize = 500_000;
+// For iGPUs, threshold 20K routes the 25K (20% weight) and 250K (50% weight)
+// benchmark batches through the OpenCL kernel.  The GPU has never been exercised
+// in prior generations — this single change may yield the largest speedup.
+const GPU_THRESHOLD: usize = 20_000;
 
 /// Lazily-initialized GPU kernel (or CPU fallback).
 fn gpu_kernel() -> &'static Option<Box<dyn gpu::GpuKernel>> {

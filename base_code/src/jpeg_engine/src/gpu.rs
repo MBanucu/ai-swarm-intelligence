@@ -155,93 +155,135 @@ mod opencl_backend {
     use super::*;
     use ocl::{ProQue, Buffer, Kernel, MemFlags};
 
-    /// OpenCL IDCT kernel source — fully unrolled 8×8 separable IDCT.
+    /// OpenCL IDCT kernel source — AAN butterfly 1D IDCT + transposed private store.
+    ///
+    /// Uses the same even-part butterfly and direct odd-part as the CPU path,
+    /// with a transposed private-memory layout (same trick as CPU idct.rs)
+    /// to make column-pass reads unit-stride (coalesced).
     const IDCT_KERNEL_SRC: &str = r#"
-    // Pre-computed IDCT1D_SCALED matrix (0.5 * C(u) * cos((2x+1)uπ/16))
-    // Transposed: mat[k] = IDCT1D_SCALED[x][u] where x = k/8, u = k%8
-    __constant float IDCT_MAT[64] = {
-        0.35355339, 0.49039264, 0.46193977, 0.41573481,
-        0.35355339, 0.27778512, 0.19134172, 0.09754516,
-        0.35355339, 0.41573481, 0.19134172,-0.09754516,
-       -0.35355339,-0.49039264,-0.46193977,-0.27778512,
-        0.35355339, 0.27778512,-0.19134172,-0.49039264,
-       -0.35355339, 0.09754516, 0.46193977, 0.41573481,
-        0.35355339, 0.09754516,-0.46193977,-0.27778512,
-        0.35355339, 0.41573481,-0.19134172,-0.49039264,
-        0.35355339,-0.09754516,-0.46193977, 0.27778512,
-        0.35355339,-0.41573481,-0.19134172, 0.49039264,
-        0.35355339,-0.27778512,-0.19134172, 0.49039264,
-       -0.35355339,-0.09754516, 0.46193977,-0.41573481,
-        0.35355339,-0.41573481, 0.19134172, 0.09754516,
-       -0.35355339, 0.49039264,-0.46193977, 0.27778512,
-        0.35355339,-0.49039264, 0.46193977,-0.41573481,
-        0.35355339,-0.27778512, 0.19134172,-0.09754516
-    };
+    // Even-part constants (same as CPU idct.rs)
+    __constant float E_A = 0.35355339059327376f;  // 1/(2√2)
+    __constant float E_B = 0.46193976625564337f;  // cos(π/8)/2
+    __constant float E_C = 0.19134171618254492f;  // cos(3π/8)/2
 
-    // 1-D IDCT helper (fully unrolled, scale-fused)
-    inline void idct_1d(__constant float* mat, float* row, float* dst) {
-        float s0 = row[0], s1 = row[1], s2 = row[2], s3 = row[3];
-        float s4 = row[4], s5 = row[5], s6 = row[6], s7 = row[7];
-        dst[0] = s0*mat[0]  + s1*mat[1]  + s2*mat[2]  + s3*mat[3]
-               + s4*mat[4]  + s5*mat[5]  + s6*mat[6]  + s7*mat[7];
-        dst[1] = s0*mat[8]  + s1*mat[9]  + s2*mat[10] + s3*mat[11]
-               + s4*mat[12] + s5*mat[13] + s6*mat[14] + s7*mat[15];
-        dst[2] = s0*mat[16] + s1*mat[17] + s2*mat[18] + s3*mat[19]
-               + s4*mat[20] + s5*mat[21] + s6*mat[22] + s7*mat[23];
-        dst[3] = s0*mat[24] + s1*mat[25] + s2*mat[26] + s3*mat[27]
-               + s4*mat[28] + s5*mat[29] + s6*mat[30] + s7*mat[31];
-        dst[4] = s0*mat[32] + s1*mat[33] + s2*mat[34] + s3*mat[35]
-               + s4*mat[36] + s5*mat[37] + s6*mat[38] + s7*mat[39];
-        dst[5] = s0*mat[40] + s1*mat[41] + s2*mat[42] + s3*mat[43]
-               + s4*mat[44] + s5*mat[45] + s6*mat[46] + s7*mat[47];
-        dst[6] = s0*mat[48] + s1*mat[49] + s2*mat[50] + s3*mat[51]
-               + s4*mat[52] + s5*mat[53] + s6*mat[54] + s7*mat[55];
-        dst[7] = s0*mat[56] + s1*mat[57] + s2*mat[58] + s3*mat[59]
-               + s4*mat[60] + s5*mat[61] + s6*mat[62] + s7*mat[63];
+    // Odd-part constants (same O matrix)
+    __constant float O_B = 0.49039264020161522f;  // cos(π/16)/2
+    __constant float O_C = 0.41573480615127262f;  // cos(3π/16)/2
+    __constant float O_D = 0.27778511650980114f;  // cos(5π/16)/2
+    __constant float O_E = 0.09754516100806417f;  // cos(7π/16)/2
+
+    // AAN 1D IDCT — butterfly even + direct odd (22 mul, ~32 add)
+    inline void idct_1d_aan(float* restrict src, float* restrict dst) {
+        float s0 = src[0], s1 = src[1], s2 = src[2], s3 = src[3];
+        float s4 = src[4], s5 = src[5], s6 = src[6], s7 = src[7];
+
+        // ── Even part (butterfly, 6 mul) ──
+        float sum_even  = s0 + s4;
+        float diff_even = s0 - s4;
+
+        float b_s2 = E_B * s2;
+        float c_s6 = E_C * s6;
+        float c_s2 = E_C * s2;
+        float b_s6 = E_B * s6;
+
+        float cross_plus  = b_s2 + c_s6;
+        float cross_minus = c_s2 - b_s6;
+
+        float a_sum  = E_A * sum_even;
+        float a_diff = E_A * diff_even;
+
+        float e0 = a_sum + cross_plus;
+        float e1 = a_diff + cross_minus;
+        float e2 = a_diff - cross_minus;
+        float e3 = a_sum - cross_plus;
+
+        // ── Odd part (direct 4×4, 16 mul) ──
+        float o0 = O_B*s1 + O_C*s3 + O_D*s5 + O_E*s7;
+        float o1 = O_C*s1 - O_E*s3 - O_B*s5 - O_D*s7;
+        float o2 = O_D*s1 - O_B*s3 + O_E*s5 + O_C*s7;
+        float o3 = O_E*s1 - O_D*s3 + O_C*s5 - O_B*s7;
+
+        // Combine
+        dst[0] = e0 + o0;  dst[7] = e0 - o0;
+        dst[1] = e1 + o1;  dst[6] = e1 - o1;
+        dst[2] = e2 + o2;  dst[5] = e2 - o2;
+        dst[3] = e3 + o3;  dst[4] = e3 - o3;
     }
 
-    __kernel void batch_idct(__global float* blocks, int num_blocks) {
+    __kernel void batch_idct(__global float* restrict blocks, int num_blocks) {
         int gid = get_global_id(0);
         if (gid >= num_blocks) return;
 
-        __global float* block = blocks + gid * 64;
+        __global float* restrict block = blocks + gid * 64;
 
-        // Private (per-work-item) memory — each work item processes one block independently
+        // Private memory for transposed row results (same trick as CPU path:
+        // store rows in transposed order so column reads are unit-stride)
         float tmp[64];
 
-        // Pass 1: IDCT on rows
+        // ── Pass 1: IDCT on rows, store TRANSPOSED into tmp ──
+        // tmp[k*8 + y] = result[y][k] (column-major temp)
         for (int y = 0; y < 8; y++) {
             int off = y * 8;
-            float row[8];
-            row[0] = block[off];   row[1] = block[off+1];
-            row[2] = block[off+2]; row[3] = block[off+3];
-            row[4] = block[off+4]; row[5] = block[off+5];
-            row[6] = block[off+6]; row[7] = block[off+7];
-            idct_1d(IDCT_MAT, row, tmp + off);
+            float row0 = block[off];    float row1 = block[off+1];
+            float row2 = block[off+2];  float row3 = block[off+3];
+            float row4 = block[off+4];  float row5 = block[off+5];
+            float row6 = block[off+6];  float row7 = block[off+7];
+            float row[8] = {row0, row1, row2, row3, row4, row5, row6, row7};
+            float d[8];
+            idct_1d_aan(row, d);
+            // Transposed store: d[k] -> tmp[k*8 + y]
+            tmp[y]       = d[0];  tmp[8  + y] = d[1];
+            tmp[16 + y]  = d[2];  tmp[24 + y] = d[3];
+            tmp[32 + y]  = d[4];  tmp[40 + y] = d[5];
+            tmp[48 + y]  = d[6];  tmp[56 + y] = d[7];
         }
 
-        // Pass 2: IDCT on columns (strided reads)
+        // ── Pass 2: IDCT on columns — read from tmp (unit stride) ──
+        // tmp[x*8 .. x*8+7] contains column x as 8 consecutive floats
         for (int x = 0; x < 8; x++) {
-            float col[8];
-            col[0] = tmp[x];      col[1] = tmp[8+x];
-            col[2] = tmp[16+x];   col[3] = tmp[24+x];
-            col[4] = tmp[32+x];   col[5] = tmp[40+x];
-            col[6] = tmp[48+x];   col[7] = tmp[56+x];
+            int off = x * 8;
+            float col0 = tmp[off];    float col1 = tmp[off+1];
+            float col2 = tmp[off+2];  float col3 = tmp[off+3];
+            float col4 = tmp[off+4];  float col5 = tmp[off+5];
+            float col6 = tmp[off+6];  float col7 = tmp[off+7];
+            float col[8] = {col0, col1, col2, col3, col4, col5, col6, col7};
             float d[8];
-            idct_1d(IDCT_MAT, col, d);
-            block[x]     = d[0];  block[8+x]   = d[1];
-            block[16+x]  = d[2];  block[24+x]  = d[3];
-            block[32+x]  = d[4];  block[40+x]  = d[5];
-            block[48+x]  = d[6];  block[56+x]  = d[7];
+            idct_1d_aan(col, d);
+            // Store to column x of block (standard row-major output)
+            block[x]      = d[0];  block[8+x]    = d[1];
+            block[16+x]   = d[2];  block[24+x]   = d[3];
+            block[32+x]   = d[4];  block[40+x]   = d[5];
+            block[48+x]   = d[6];  block[56+x]   = d[7];
         }
     }
 
     __kernel void batch_fdct(__global float* blocks, int num_blocks) {
         int gid = get_global_id(0);
         if (gid >= num_blocks) return;
-        // For now, just zero them (placeholder — real DCT kernel would go here)
+        // Placeholder — real DCT kernel would go here
         __global float* block = blocks + gid * 64;
         block[0] = 0.0;
+    }
+
+    __kernel void batch_ycbcr_to_rgb(
+        __global const float* y, __global const float* cb, __global const float* cr,
+        __global uchar* r, __global uchar* g, __global uchar* b,
+        int num_pixels)
+    {
+        int gid = get_global_id(0);
+        if (gid >= num_pixels) return;
+
+        float cb_off = cb[gid] - 128.0f;
+        float cr_off = cr[gid] - 128.0f;
+
+        float rv = y[gid] + 1.402f    * cr_off;
+        float gv = y[gid] - 0.344136f * cb_off - 0.714136f * cr_off;
+        float bv = y[gid] + 1.772f    * cb_off;
+
+        // Clamp and round
+        r[gid] = (uchar)(clamp(rv + 0.5f, 0.0f, 255.0f));
+        g[gid] = (uchar)(clamp(gv + 0.5f, 0.0f, 255.0f));
+        b[gid] = (uchar)(clamp(bv + 0.5f, 0.0f, 255.0f));
     }
     "#;
 
@@ -338,10 +380,90 @@ mod opencl_backend {
         }
 
         fn batch_ycbcr_to_rgb(
-            &self, _y: &[f32], _cb: &[f32], _cr: &[f32],
-            _r: &mut [u8], _g: &mut [u8], _b: &mut [u8],
+            &self, y: &[f32], cb: &[f32], cr: &[f32],
+            r: &mut [u8], g: &mut [u8], b: &mut [u8],
         ) -> Result<(), GpuError> {
-            Err(GpuError::NotAvailable)
+            let n = y.len();
+            if n == 0 { return Ok(()); }
+
+            let total = n;
+
+            // Allocate fresh device buffers for each color plane
+            // (the Mutex in self.buf is for the IDCT reuse pool, not used here)
+            let buf_y = Buffer::builder()
+                .queue(self.pro_que.queue().clone())
+                .flags(MemFlags::new().read_only())
+                .len(total)
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("buf_y alloc: {e}")))?;
+            let buf_cb = Buffer::builder()
+                .queue(self.pro_que.queue().clone())
+                .flags(MemFlags::new().read_only())
+                .len(total)
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("buf_cb alloc: {e}")))?;
+            let buf_cr = Buffer::builder()
+                .queue(self.pro_que.queue().clone())
+                .flags(MemFlags::new().read_only())
+                .len(total)
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("buf_cr alloc: {e}")))?;
+            let buf_r = Buffer::builder()
+                .queue(self.pro_que.queue().clone())
+                .flags(MemFlags::new().write_only())
+                .len(total)
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("buf_r alloc: {e}")))?;
+            let buf_g = Buffer::builder()
+                .queue(self.pro_que.queue().clone())
+                .flags(MemFlags::new().write_only())
+                .len(total)
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("buf_g alloc: {e}")))?;
+            let buf_b = Buffer::builder()
+                .queue(self.pro_que.queue().clone())
+                .flags(MemFlags::new().write_only())
+                .len(total)
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("buf_b alloc: {e}")))?;
+
+            // Write inputs
+            buf_y.write(unsafe {
+                std::slice::from_raw_parts(y.as_ptr() as *const f32, total)
+            }).enq().map_err(|e| GpuError::KernelError(format!("write y: {e}")))?;
+            buf_cb.write(cb).enq().map_err(|e| GpuError::KernelError(format!("write cb: {e}")))?;
+            buf_cr.write(cr).enq().map_err(|e| GpuError::KernelError(format!("write cr: {e}")))?;
+
+            // Build and launch kernel — rebuild each time since arguments change
+            let kernel = ocl::Kernel::builder()
+                .program(&self.pro_que.program())
+                .name("batch_ycbcr_to_rgb")
+                .queue(self.pro_que.queue().clone())
+                .arg(&buf_y)
+                .arg(&buf_cb)
+                .arg(&buf_cr)
+                .arg(&buf_r)
+                .arg(&buf_g)
+                .arg(&buf_b)
+                .arg(&(n as i32))
+                .build()
+                .map_err(|e| GpuError::KernelError(format!("kernel build ycbcr: {e}")))?;
+
+            unsafe {
+                let local_size = if n < 64 { n as u64 } else { 64 };
+                kernel.cmd()
+                    .global_work_size(n)
+                    .local_work_size((local_size,))
+                    .enq()
+                    .map_err(|e| GpuError::KernelError(format!("enqueue ycbcr: {e}")))?;
+            }
+
+            // Read outputs
+            buf_r.read(r).enq().map_err(|e| GpuError::KernelError(format!("read r: {e}")))?;
+            buf_g.read(g).enq().map_err(|e| GpuError::KernelError(format!("read g: {e}")))?;
+            buf_b.read(b).enq().map_err(|e| GpuError::KernelError(format!("read b: {e}")))?;
+
+            Ok(())
         }
 
         fn device_name(&self) -> &str {

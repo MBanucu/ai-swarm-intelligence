@@ -1,4 +1,1 @@
-| Generation | Attempt | ns/block | Status | Timestamp |
-| ---------- | ------- | ------- | ------ | --------- |
-|            |         |         |        |           |
-| Gen 1 | Attempt 1 | 94.734000ms | best | 2026-07-08T11:13:45+02:00 |
+{"gen": 1, "attempt": 6, "score": 56.934, "status": "winner", "timestamp": "2026-07-08T12:52:30+02:00"}

@@ -346,12 +346,12 @@ def _run_baseline():
     if proc.returncode != 0:
         return None
     for line in reversed(output_lines):
-        if "Fitness" in line:
-            try:
-                parts = line.split()
-                return float(parts[2])
-            except (IndexError, ValueError):
-                pass
+        try:
+            data = json.loads(line.strip())
+            if "fitness" in data:
+                return float(data["fitness"])
+        except (json.JSONDecodeError, ValueError):
+            pass
     return None
 
 
@@ -411,11 +411,11 @@ def _save_state(gen, attempt, best_score=None):
 
 def _log_attempt(gen, attempt, score, status):
     ts = datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
+    entry = json.dumps(
+        {"gen": gen, "attempt": attempt, "score": score, "status": status, "timestamp": ts}
+    )
     with open(BENCHMARK_HISTORY, "a") as f:
-        f.write(
-            f"| Gen {gen} | Attempt {attempt}"
-            f" | {score:.6f}ms | {status} | {ts} |\n"
-        )
+        f.write(entry + "\n")
 
 
 def main():
@@ -442,15 +442,17 @@ def main():
     if gen > 1 and os.path.exists(BENCHMARK_HISTORY):
         with open(BENCHMARK_HISTORY) as f:
             for line in f:
-                if line.strip().startswith(f"| Gen {gen - 1}"):
-                    parts = [p.strip() for p in line.split("|")]
-                    if len(parts) >= 4:
-                        try:
-                            score = float(parts[3].rstrip("ms"))
-                            if prev_best is None or score < prev_best:
-                                prev_best = score
-                        except ValueError:
-                            pass
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("gen") == gen - 1:
+                        score = float(entry["score"])
+                        if prev_best is None or score < prev_best:
+                            prev_best = score
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    pass
 
     if prev_best is not None:
         print(f"[swarm] Previous generation {gen - 1} best: {prev_best:.3f}ns/block")
@@ -503,13 +505,13 @@ def main():
         if child.run_lifecycle():
             if prev_best is not None and child.score >= prev_best:
                 failure = {"attempt": child.attempt,
-                           "reason": f"regression ({child.score:.6f}ms >= prev {prev_best:.6f}ms)"}
+                           "reason": f"regression ({child.score:.3f}ns/block >= prev {prev_best:.3f}ns/block)"}
                 sibling_failures.append(failure)
                 _save_failure(failure_dir, attempt, failure)
                 _save_state(gen, attempt + 1)
                 _log_attempt(gen, attempt, child.score, "regression")
                 print()
-                print(f"REGRESSION on attempt {attempt}: {child.score:.6f}ms >= previous gen {prev_best:.6f}ms")
+                print(f"REGRESSION on attempt {attempt}: {child.score:.3f}ns/block >= previous gen {prev_best:.3f}ns/block")
             elif child.score < best_score:
                 best_score = child.score
                 winner_dir = child.dir
@@ -546,7 +548,7 @@ def main():
 
     if prev_best is not None and best_score >= prev_best:
         print()
-        print(f"[swarm] REGRESSION: winner {best_score:.6f}ms >= previous {prev_best:.6f}ms")
+        print(f"[swarm] REGRESSION: winner {best_score:.3f}ns/block >= previous {prev_best:.3f}ns/block")
         print(f"[swarm] ABORTING generation {gen} — no improvement. Re-run for fresh mutations.")
         sys.exit(1)
 
