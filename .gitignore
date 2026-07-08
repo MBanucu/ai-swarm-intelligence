@@ -9,6 +9,7 @@ target/
 
 !logs/baseline_perf.log
 !logs/baseline_perf_report.log
+!logs/baseline_perf_annotate_*.log
 !logs/winners/*.log
 !logs/winners/*.score
 !logs/winners/*.md

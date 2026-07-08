@@ -123,10 +123,10 @@ class ChildProcess:
             f" hardware performance counters (instructions, cycles,"
             f" cache-misses, branch-misses, task-clock) from the parent"
             f" code's benchmark.\n"
-            f"7) Baseline per-function profile: '{ROOT_DIR}/logs/baseline_perf_report.log' —"
-            f" CPU sampling showing WHICH FUNCTIONS consume the most time."
-            f" This is the most actionable data for optimization."
-            f" Compare sibling perf_stat.log files against this baseline.\n"
+            f"7) Baseline per-function annotation: '{ROOT_DIR}/logs/baseline_perf_annotate_*.log' —"
+            f" instruction-level CPU cycle breakdown for hot functions."
+            f" Shows exactly which loads, shuffles, and arithmetic ops"
+            f" consume the most time inside each function.\n"
         )
         if self.sibling_failures:
             for f in self.sibling_failures[-5:]:

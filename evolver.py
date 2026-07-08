@@ -63,27 +63,26 @@ def _run_baseline():
         )
         proc2.wait()
         if proc2.returncode == 0 and os.path.exists(perf_data):
+            result = subprocess.run(
+                ["perf", "report", "--stdio", "-g", "graph",
+                 "--percent-limit", "0.5", "-i", perf_data],
+                capture_output=True, text=True,
+            )
             with open(perf_report, "w") as rf:
-                subprocess.run(
-                    ["perf", "report", "--stdio", "-g", "graph",
-                     "--percent-limit", "0.5", "-i", perf_data],
-                    stdout=rf, stderr=subprocess.DEVNULL,
-                )
-                rf.write("\n\n# ========== PER-FUNCTION ANNOTATION ==========\n")
-                top_symbols = subprocess.run(
-                    ["perf", "report", "--stdio", "--percent-limit", "5",
-                     "--no-children", "-i", perf_data],
+                rf.write(result.stdout)
+            for symbol in ("jpeg_engine::idct::idct_2d",
+                           "jpeg_engine::idct::batch_idct_2d"):
+                safe_name = symbol.replace("::", "_")
+                annot_path = os.path.join(ROOT_DIR, "logs",
+                                          f"baseline_perf_annotate_{safe_name}.log")
+                result = subprocess.run(
+                    ["perf", "annotate", "--stdio", "--no-source",
+                     "-i", perf_data, symbol],
                     capture_output=True, text=True,
-                ).stdout
-                for symbol in {"jpeg_engine::idct::idct_2d",
-                               "jpeg_engine::idct::batch_idct_2d"}:
-                    rf.write(f"\n## {symbol}\n\n")
-                    subprocess.run(
-                        ["perf", "annotate", "--stdio", "--no-source",
-                         "-i", perf_data, symbol],
-                        stdout=rf, stderr=subprocess.DEVNULL,
-                    )
-            print(f"[swarm] Perf report saved to {perf_report}")
+                )
+                with open(annot_path, "w") as af:
+                    af.write(result.stdout or "(no annotation data)\n")
+            print(f"[swarm] Perf reports saved to logs/baseline_perf_*.log")
 
     for line in reversed(output_lines):
         m = re.search(r'Fitness \(weighted avg\):\s*([\d.]+)\s*ns/block', line)

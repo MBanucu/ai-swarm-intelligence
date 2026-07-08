@@ -1,17 +1,17 @@
-# started on Wed Jul  8 17:37:44 2026
+# started on Wed Jul  8 17:40:34 2026
 
 
  Performance counter stats for 'cargo run --release --features gpu --bin bench -- 5000 /dev/stdout':
 
-    76.535.696.258      instructions:u                                                        
-    51.569.539.979      cycles:u                                                              
-       524.814.105      cache-misses:u                                                        
-        11.583.403      branch-misses:u                                                       
-         23.699,22 msec task-clock:u                                                          
+    76.537.330.742      instructions:u                                                        
+    51.420.883.515      cycles:u                                                              
+       568.065.398      cache-misses:u                                                        
+        10.791.089      branch-misses:u                                                       
+         25.450,92 msec task-clock:u                                                          
 
-      10,741775687 seconds time elapsed
+      11,766016382 seconds time elapsed
 
-      20,155947000 seconds user
-       3,365506000 seconds sys
+      21,474313000 seconds user
+       3,763105000 seconds sys
 
 
