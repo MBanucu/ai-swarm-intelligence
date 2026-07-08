@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import time
 
 from config import (
     ROOT_DIR,
@@ -13,6 +14,7 @@ from config import (
 )
 
 _PERF_EVENTS = "instructions,cycles,cache-misses,branch-misses,task-clock"
+_STALL_TIMEOUT = 60
 
 
 def _perf_available():
@@ -24,11 +26,36 @@ def _run_opencode(args, log_path):
     for model in (PRIMARY_MODEL, FALLBACK_MODEL):
         cmd = ["unbuffer", "opencode", "--model", model] + args
         with open(log_path, "w") as f:
-            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-        if result.returncode == 0:
+            proc = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
+
+        last_size = 0
+        stall_start = None
+        while proc.poll() is None:
+            time.sleep(3)
+            try:
+                cur_size = os.path.getsize(log_path)
+            except OSError:
+                cur_size = 0
+            if cur_size > last_size:
+                last_size = cur_size
+                stall_start = None
+            elif stall_start is None:
+                stall_start = time.monotonic()
+            elif time.monotonic() - stall_start > _STALL_TIMEOUT:
+                proc.kill()
+                proc.wait()
+                print(
+                    f"  [timeout] agent stalled >{_STALL_TIMEOUT}s, terminating...",
+                    flush=True,
+                )
+                break
+
+        if proc.returncode == 0:
             return True
-        print(f"  [fallback] model={model} failed (rc={result.returncode}), retrying...",
-              flush=True)
+        print(
+            f"  [fallback] model={model} failed (rc={proc.returncode}), retrying...",
+            flush=True,
+        )
     return False
 
 
